@@ -1,0 +1,6 @@
+# Local CUTLASS checkout (re-clone with the command in README / build.sh)
+/cutlass/
+
+# Build artifacts
+/gemm
+*.o
