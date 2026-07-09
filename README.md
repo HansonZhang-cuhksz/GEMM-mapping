@@ -126,16 +126,18 @@ power-cap noise. Sweep the split count with the `--config splitK` entries
 sufficient: cuBLAS ships hand-tuned SASS, so for other shapes a matched CUTLASS
 mapping may land close but not exactly on cuBLAS.
 
-## Can a mapping beat cuBLAS? Profiling the neighborhood (`--fair`)
+## Can a mapping beat cuBLAS? Profiling the neighborhood
 
-**Measurement caveat first.** On this 35 W-capped 4060, naively timing every
-mapping and then cuBLAS *last* is unfair — the GPU is hottest/most throttled by the
-time cuBLAS runs, making CUTLASS look artificially good. Use **`--fair`**: it
-interleaves each candidate with cuBLAS (A,B,A,B,…) and reports the **median
-`cuBLAS_ms / candidate_ms` over N rounds**, so slow thermal drift cancels.
+**Timing is always fair.** On this 35 W-capped 4060, naively timing every mapping
+and then cuBLAS *last* is unfair — the GPU is hottest/most throttled by the time
+cuBLAS runs, making CUTLASS look artificially good. So every candidate is
+**interleaved with cuBLAS** (A,B,A,B,…) and the reported speedup is the **median
+`cuBLAS_ms / candidate_ms` over `--rounds` rounds**, which cancels slow thermal
+drift. (Because of that drift, compare rows by the `vs cuBLAS` ratio, not by the
+absolute `time(ms)` column — each row's ms was measured in a different thermal state.)
 
 ```bash
-./run.sh --dtype fp16 --m 128 --n 4096 --k 4096 --fair --iters 80 --fair-rounds 15
+./run.sh --dtype fp16 --m 128 --n 4096 --k 4096 --iters 80 --rounds 15
 ```
 
 Sweeping the neighborhood of cuBLAS's optimum (tile 128×128×32, split-K≈3) on the
@@ -162,6 +164,75 @@ skinny `128×4096×4096` shape gives a **stable, reproducible** picture:
 Don't over-read the 2–3%: it is real and repeatable here, but it is the kind of
 margin that can flip on a non-power-capped GPU, a different shape, or a newer cuBLAS.
 The robust conclusion is **parity ± a few percent**, with split-K being decisive.
+
+## Five-way comparison: cuBLAS vs CUTLASS vs snowcat (`128×4096×4096`)
+
+`snowcat` (the Snowcat/Orojenesis traffic model, wrapped by
+`gemm_time_estimator.py`) is an analytical roofline estimator: for a mapping it
+predicts a time, and `--optimal` returns the **minimum-HBM-traffic** tile. This
+compares, in measured wall-clock time, the mappings each source recommends:
+
+| # | contender | mapping | fair vs cuBLAS | time |
+|---|-----------|---------|:---:|:---:|
+| 1 | **cuBLAS** (measured) | 128×128, split-K=3 (its own pick) | 1.00× | ~0.25 ms |
+| 2 | CUTLASS, **cuBLAS's mapping** | 128×128×32, s2, split-K=3 | ~1.01× | ~0.25 ms |
+| 3 | CUTLASS, **auto-selected** (this tool) | 128×128×32, **s3**, split-K=3 | **~1.04×** | ~0.24 ms |
+| 4 | CUTLASS, **snowcat's optimal mapping** | 128×256×(16→32), **no split-K** | **~0.70×** | ~0.35 ms |
+| 5 | **snowcat estimation** (predicted) | for its optimal mapping | — | **0.209 ms** |
+
+(fp16 and bf16 agree to within noise; the auto winner flips between
+`tb128x128x32_splitK3` and `nbr_tb64x128_splitK3` — both ~1.03–1.07×.)
+
+Reproduce:
+```bash
+./run.sh --dtype fp16 --m 128 --n 4096 --k 4096 --iters 80 --rounds 21 \
+  --config cublas_match_s2_splitK3,tb128x128x32_splitK3,nbr_tb64x128_splitK3,snowcat_opt
+PYTHONPATH=/home/shuhan/snowcat-demo conda run -n profiling \
+  python gemm_time_estimator.py --m 128 --n 4096 --k 4096 --optimal   # -> 0.209 ms
+```
+
+**What this shows**
+- Rows 1–3 are a tight cluster at **parity** — auto-tuning edges cuBLAS by ~4% by
+  keeping cuBLAS's split-K but using a deeper pipeline (stages 3 vs cuBLAS's ~2).
+- **Snowcat's optimal mapping is the slowest real contender (~0.70×, ~40% slower
+  than cuBLAS)** — because snowcat minimizes *traffic*, and split-K *adds* traffic
+  (partial-sum reduction) while *raising* SM occupancy 66.7%→100%. On this skinny,
+  occupancy-bound shape occupancy is the binding constraint, so the traffic-optimal
+  tile is the wrong choice. (Tellingly, if you *hand* snowcat the split-K mapping it
+  rates it 0.172 ms — faster than its own 0.209 ms optimum; its `--optimal` search
+  just never explores split-K.)
+- **Snowcat's estimate is optimistic**: it predicts 0.209 ms for a mapping that
+  actually runs at ~0.35 ms (~0.6×). It is a peak-BW lower bound, useful for
+  ranking memory-bound tiles, but it does not capture the split-K occupancy win, so
+  its *chosen* mapping underperforms even though its *number* looks fast.
+
+Bottom line: for this shape the estimator picks the wrong mapping (no split-K) and
+under-predicts time; cuBLAS's own choice and this tool's split-K auto-tune win.
+
+### Apples-to-apples: auto-tune *without* split-K (`--no-splitk`)
+
+Split-K is genuinely hard to model, so to compare fairly against the non-split-K
+estimator, restrict CUTLASS's auto-tune to non-split-K mappings:
+
+```bash
+./run.sh --dtype fp16 --m 128 --n 4096 --k 4096 --rounds 13 --no-splitk
+```
+
+| non-split-K contender | tile | measured vs cuBLAS | measured | snowcat est |
+|---|---|:---:|:---:|:---:|
+| **CUTLASS auto (`--no-splitk`)** | **64×64×32** | **0.93×** | ~0.31 ms | 0.301 ms ✔ |
+| snowcat's `--optimal` | 128×256 | 0.71× | ~0.35 ms | 0.209 ms ✗ |
+
+Even with split-K off, **CUTLASS's empirical auto-tune beats snowcat's mapping by
+~24%** — and the two *disagree on the tile*. Snowcat minimizes traffic, so it picks
+the big 128×256 tile (34 MiB traffic, but only 16 output tiles → 66.7% occupancy);
+CUTLASS's search picks the small 64×64 tile (65 MiB traffic, but 128 tiles → ~89%
+occupancy), because occupancy is the real bottleneck. Tellingly, snowcat's *own
+time model* also prefers 128×256 (0.209 ms) over 64×64 (0.301 ms) — its linear
+occupancy derate (`bw_eff = bw·sm_util`) under-penalizes the low-wave-count big tile,
+so it is accurate for 64×64 (0.301 est vs 0.31 measured) but optimistic for 128×256
+(0.209 est vs 0.35 measured). The traffic objective *and* the coarse occupancy model
+both push snowcat toward the wrong tile here.
 
 These map onto the same knobs CUTLASS exposes: `tile`↔`ThreadblockShape`,
 `stages`↔`Stages`, `ctaSwizzling`↔`ThreadblockSwizzle`, `numSplitsK`↔split-K.

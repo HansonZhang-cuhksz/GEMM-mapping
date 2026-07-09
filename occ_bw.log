@@ -1,0 +1,1 @@
+# num_sm=24 max_threads/SM=1536 dyn_smem/block=61440 B (forces 1 block/SM)

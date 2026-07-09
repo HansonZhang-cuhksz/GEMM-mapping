@@ -67,10 +67,10 @@ int  G_K       = 4096;   // contraction dim
 int  G_WARMUP  = 10;     // warmup iterations (not timed)
 int  G_ITERS   = 50;     // timed iterations (averaged)
 bool G_RUN_ALL = true;   // run every registry mapping; false => only --config
-std::string G_ONLY  = ""; // name filter for --config (substring match)
+std::string G_ONLY  = ""; // name filter for --config (comma-separated substrings, OR)
 std::string G_DTYPE = "both"; // input precision: fp16 | bf16 | both
-bool G_FAIR   = false;   // fair interleaved A/B timing vs cuBLAS (cancels power drift)
-int  G_FAIR_ROUNDS = 9;  // rounds whose median is taken in fair mode
+int  G_ROUNDS = 9;       // rounds whose median is taken (interleaved A/B vs cuBLAS)
+bool G_NO_SPLITK = false; // exclude split-K mappings from the sweep & auto-tune
 
 // =============================================================================
 //  PRIMARY MAPPING  — edit these and recompile to explore the "custom" schedule.
@@ -308,33 +308,23 @@ static BenchResult run_cutlass(const std::string& name, int swizzle_log, int spl
     return r;
   }
 
-  // ---- benchmark ----
-  auto cand_launch = [&]{ (void)gemm_op(); };
-  if (!G_FAIR) {
-    // Plain timing: candidate only (cuBLAS timed once separately at the end).
-    for (int i = 0; i < G_WARMUP; ++i) cand_launch();
-    CUDA_CHECK(cudaDeviceSynchronize());
-    r.ms = time_launches(cand_launch, G_ITERS);
-  } else {
-    // Fair timing: interleave candidate & cuBLAS so both share thermal/power
-    // state; take the median (cuBLAS_ms / cand_ms) over rounds. The RATIO cancels
-    // the slow power-cap drift that biases a candidate-then-cuBLAS comparison.
-    auto cublas_launch = [&]{ cublas_gemm<EA>(g_handle, g_dA, g_dB, g_dC, g_M, g_N, g_K); };
-    for (int i = 0; i < G_WARMUP; ++i) { cand_launch(); cublas_launch(); }
-    CUDA_CHECK(cudaDeviceSynchronize());
-    std::vector<double> cand, cub, ratio;
-    for (int rnd = 0; rnd < G_FAIR_ROUNDS; ++rnd) {
-      double c = time_launches(cand_launch, G_ITERS);
-      double b = time_launches(cublas_launch, G_ITERS);
-      cand.push_back(c); cub.push_back(b); ratio.push_back(b / c);
-    }
-    // cuBLAS overwrites g_dC; restore the candidate's output for the (already
-    // passed) correctness check invariant is irrelevant now, but re-run once so a
-    // later re-read would see candidate output. Not needed for timing.
-    r.ms = median(cand);
-    r.fair_cublas_ms = median(cub);
-    r.fair_speedup = median(ratio);
+  // ---- benchmark: interleave candidate & cuBLAS so both share thermal/power
+  //      state; take the median (cuBLAS_ms / cand_ms) over rounds. The RATIO
+  //      cancels the slow power-cap drift that would bias a candidate-then-cuBLAS
+  //      comparison (cuBLAS timed last on a hot, throttled GPU looks slow).
+  auto cand_launch   = [&]{ (void)gemm_op(); };
+  auto cublas_launch = [&]{ cublas_gemm<EA>(g_handle, g_dA, g_dB, g_dC, g_M, g_N, g_K); };
+  for (int i = 0; i < G_WARMUP; ++i) { cand_launch(); cublas_launch(); }
+  CUDA_CHECK(cudaDeviceSynchronize());
+  std::vector<double> cand, cub, ratio;
+  for (int rnd = 0; rnd < G_ROUNDS; ++rnd) {
+    double c = time_launches(cand_launch, G_ITERS);
+    double b = time_launches(cublas_launch, G_ITERS);
+    cand.push_back(c); cub.push_back(b); ratio.push_back(b / c);
   }
+  r.ms = median(cand);
+  r.fair_cublas_ms = median(cub);
+  r.fair_speedup = median(ratio);
   r.tflops = (2.0*g_M*g_N*g_K) / (r.ms*1e-3) / 1e12;
 
   if (workspace) CUDA_CHECK(cudaFree(workspace));
@@ -369,17 +359,26 @@ struct Registry {
   std::vector<BenchResult>* out;
   bool wanted(const std::string& n) const {
     if (G_RUN_ALL) return true;
-    return !G_ONLY.empty() && n.find(G_ONLY) != std::string::npos;
+    // G_ONLY is a comma-separated list of substrings; match if ANY is contained.
+    size_t start = 0;
+    while (start <= G_ONLY.size()) {
+      size_t comma = G_ONLY.find(',', start);
+      std::string tok = G_ONLY.substr(start, comma==std::string::npos ? std::string::npos : comma-start);
+      if (!tok.empty() && n.find(tok) != std::string::npos) return true;
+      if (comma == std::string::npos) break;
+      start = comma + 1;
+    }
+    return false;
   }
   template <typename Gemm> void add(const std::string& n, int swizzle_log, int split_k = 1) {
     if (!wanted(n)) return;
+    if (G_NO_SPLITK && split_k > 1) return;   // apples-to-apples vs a non-split-K estimator
     std::printf("  [%-28s] testing... ", n.c_str()); std::fflush(stdout);
     BenchResult r = run_cutlass<Gemm>(n, swizzle_log, split_k);
     if (!r.implementable)      std::printf("SKIP (not implementable)\n");
     else if (!r.correct)       std::printf("FAIL correctness (max_rel=%.3g)\n", r.max_rel);
-    else if (G_FAIR)           std::printf("ok  %.3f ms  %.1f TFLOP/s  %.2fx cuBLAS%s\n",
+    else                       std::printf("ok  %.3f ms  %.1f TFLOP/s  %.2fx cuBLAS%s\n",
                                    r.ms, r.tflops, r.fair_speedup, r.fair_speedup>1.0?"  <== faster":"");
-    else                       std::printf("ok  %.3f ms  %.1f TFLOP/s\n", r.ms, r.tflops);
     out->push_back(r);
   }
 };
@@ -425,6 +424,14 @@ static void run_all_mappings(std::vector<BenchResult>& results) {
   reg.add<GemmMappingSplitKT<E, 128, 64,32, 64,32,32, 16,8,16, 2, 1>>("nbr_tb128x64_splitK3", 1, 3);
   reg.add<GemmMappingSplitKT<E,  64,128,32, 32,64,32, 16,8,16, 2, 1>>("nbr_tb64x128_splitK3", 1, 3);
   reg.add<GemmMappingSplitKT<E, 128,128,32, 64,64,32, 16,8,16, 2, 2>>("nbr_s2_splitK3_swz2", 2, 3);
+
+  // ---- SNOWCAT's estimated-optimal mapping (min-traffic tile from the roofline
+  //      estimator, gemm_time_estimator.py --optimal): tile 128x256xBK, no split-K,
+  //      C=1. Snowcat picks BK=16, but CUTLASS 2.x needs WarpK>=32 (kWarpGemm-
+  //      Iterations must be even), so BK is rounded up to 32 here. Stages=2 is the
+  //      CUTLASS floor (snowcat's C=1). Snowcat minimizes traffic, so its optimum
+  //      never uses split-K, even though its own latency model rates split-K faster.
+  reg.add<GemmMappingT<E, 128,256,32, 64,64,32, 16,8,16, 2, 1>>("snowcat_opt_tb128x256", 1);
 }
 
 // =============================================================================
@@ -508,30 +515,29 @@ static void run_dtype(cublasHandle_t handle) {
   BenchResult cub = run_cublas<Element>(handle);
   std::printf("  [%-28s] %.3f ms  %.1f TFLOP/s\n", cub.name.c_str(), cub.ms, cub.tflops);
 
-  // 5) Summary table. In fair mode the "vs cuBLAS" column is the median
-  //    interleaved speedup (robust to power-cap drift); otherwise it is the ratio
-  //    of separately-measured times (informative but biased by measurement order).
+  // 5) Summary table. The "vs cuBLAS" column is the median interleaved speedup
+  //    (cuBLAS_ms / this_ms measured back-to-back), robust to power-cap drift.
   cub.fair_speedup = 1.0;   // baseline vs itself
-  auto speedup = [&](const BenchResult& r){ return G_FAIR ? r.fair_speedup : cub.ms / r.ms; };
+  auto speedup = [&](const BenchResult& r){ return r.fair_speedup; };
   std::vector<BenchResult> table;
   for (auto& r : results) if (r.implementable && r.correct) table.push_back(r);
   table.push_back(cub);
   std::sort(table.begin(), table.end(),
             [&](const BenchResult& a, const BenchResult& b){ return speedup(a) > speedup(b); });
 
-  std::printf("\n=================== SUMMARY (%s, M=%d N=%d K=%d%s) ===================\n",
-              label, g_M, g_N, g_K, G_FAIR ? ", FAIR interleaved" : "");
+  std::printf("\n=========== SUMMARY (%s, M=%d N=%d K=%d, fair interleaved) ===========\n",
+              label, g_M, g_N, g_K);
   std::printf("%-30s %10s %10s %9s %8s\n", "mapping", "time(ms)", "TFLOP/s", "vs cuBLAS", "max_rel");
   std::printf("----------------------------------------------------------------\n");
   for (auto& r : table) {
-    const char* tag = r.name=="cuBLAS" ? "  <- baseline" : (G_FAIR && speedup(r) > 1.0 ? "  <== faster" : "");
+    const char* tag = r.name=="cuBLAS" ? "  <- baseline" : (speedup(r) > 1.0 ? "  <== faster" : "");
     std::printf("%-30s %10.3f %10.1f %8.2fx %9.1e%s\n",
                 r.name.c_str(), r.ms, r.tflops, speedup(r), r.max_rel, tag);
   }
   std::printf("================================================================\n");
 
   // 6) AUTO-TUNE: pick the best correct CUTLASS mapping for this size (by fair
-  //    speedup when available) and print its full schedule.
+  //    speedup) and print its full schedule.
   const BenchResult* best = nullptr;
   for (auto& r : results)
     if (r.implementable && r.correct && (!best || speedup(r) > speedup(*best))) best = &r;
@@ -541,7 +547,7 @@ static void run_dtype(cublasHandle_t handle) {
     print_mapping(best->map, "            ");
     std::printf("            -> %.3f ms, %.1f TFLOP/s, %.2fx cuBLAS%s\n",
                 best->ms, best->tflops, speedup(*best),
-                (G_FAIR && speedup(*best) > 1.0) ? "  (beats cuBLAS)" : "");
+                speedup(*best) > 1.0 ? "  (beats cuBLAS)" : "");
   }
 
   CUDA_CHECK(cudaFree(g_dA)); CUDA_CHECK(cudaFree(g_dB)); CUDA_CHECK(cudaFree(g_dC));
@@ -558,12 +564,15 @@ static void usage(const char* prog) {
     "  --dtype fp16|bf16|both  input precision       (default %s)\n"
     "  --iters N             timed iterations        (default %d)\n"
     "  --warmup N            warmup iterations       (default %d)\n"
-    "  --config NAME         run only mappings whose name contains NAME (plus cuBLAS)\n"
-    "  --fair                fair interleaved A/B timing vs cuBLAS (median of rounds;\n"
-    "                        recommended when comparing against cuBLAS on a power-capped GPU)\n"
-    "  --fair-rounds N       rounds for the fair median          (default %d)\n"
-    "  --help                this message\n",
-    prog, G_M, G_N, G_K, G_DTYPE.c_str(), G_ITERS, G_WARMUP, G_FAIR_ROUNDS);
+    "  --config LIST         run only mappings whose name contains any comma-separated\n"
+    "                        substring in LIST (plus cuBLAS)\n"
+    "  --rounds N            interleaved A/B rounds for the median  (default %d)\n"
+    "  --no-splitk           exclude split-K mappings (auto-tune over non-split-K only;\n"
+    "                        apples-to-apples vs a non-split-K estimator)\n"
+    "  --help                this message\n"
+    "\nTiming is always fair: each candidate is interleaved with cuBLAS and the\n"
+    "reported speedup is the median cuBLAS_ms/candidate_ms over --rounds rounds.\n",
+    prog, G_M, G_N, G_K, G_DTYPE.c_str(), G_ITERS, G_WARMUP, G_ROUNDS);
 }
 
 int main(int argc, char** argv) {
@@ -577,8 +586,8 @@ int main(int argc, char** argv) {
     else if (a=="--warmup") next(G_WARMUP);
     else if (a=="--dtype") { if(i+1<argc) G_DTYPE = argv[++i]; }
     else if (a=="--config"){ if(i+1<argc){ G_ONLY=argv[++i]; G_RUN_ALL=false; } }
-    else if (a=="--fair")  { G_FAIR = true; }
-    else if (a=="--fair-rounds") next(G_FAIR_ROUNDS);
+    else if (a=="--rounds") next(G_ROUNDS);
+    else if (a=="--no-splitk") { G_NO_SPLITK = true; }
     else if (a=="--help"){ usage(argv[0]); return 0; }
     else { std::fprintf(stderr,"unknown arg: %s\n", a.c_str()); usage(argv[0]); return 1; }
   }
@@ -596,7 +605,8 @@ int main(int argc, char** argv) {
   cublasHandle_t handle; CUBLAS_CHECK(cublasCreate(&handle));
   CUBLAS_CHECK(cublasSetMathMode(handle, CUBLAS_TENSOR_OP_MATH));
   g_handle = handle;   // used by the fair interleaved comparison inside run_cutlass
-  if (G_FAIR) std::printf("(fair mode: interleaved A/B vs cuBLAS, median of %d rounds)\n", G_FAIR_ROUNDS);
+  std::printf("(fair timing: interleaved A/B vs cuBLAS, median of %d rounds)%s\n",
+              G_ROUNDS, G_NO_SPLITK ? "  [split-K mappings excluded]" : "");
 
   if (G_DTYPE=="fp16" || G_DTYPE=="both") run_dtype<cutlass::half_t>(handle);
   if (G_DTYPE=="bf16" || G_DTYPE=="both") run_dtype<cutlass::bfloat16_t>(handle);
