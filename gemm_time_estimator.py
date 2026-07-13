@@ -107,25 +107,23 @@ RTX4060_LAPTOP = GpuModel(
     l2_bytes=33554432,                        # 32 MiB, torch get_device_properties L2
 )
 
-# Calibrated to THIS device by direct microbenchmark (membench.cu, gpu_boost_probe.cu,
-# occupancy_bw.cu), with the GPU WARMED under continuous load so it boosts out of its
-# idle underclock (nvidia-smi confirms 210 MHz/6 W idle -> ~1680 MHz/35 W under load):
-#   * SM clock       : ~1680 MHz under a sustained tensor GEMM (pinned at the 35 W cap;
-#                      ~2070 MHz for lighter FP32 loads). NOT 3105 (max-boost) and NOT
-#                      the earlier 372 MHz artifact (that was measured cold/idle).
-#   * tensor rate    : ~128 FLOP/clk/core for FP16->FP32 on consumer Ada (GeForce halves
-#                      the FP32-accumulate rate vs the 512 A100 figure). 96 cores * 128 *
-#                      1.70 GHz = 20.9 TFLOP/s roof; measured cuBLAS 4096^3 warm = 23.4
-#                      TFLOP/s (~92% of the ~2.0 GHz peak).
-#   * DRAM bandwidth : 218 GB/s achievable (read-stream, 512 MiB >> L2) vs 256 spec.
-#   * DRAM latency   : 301 ns (pointer-chase) = 512 cycles @ 1.70 GHz.
+# Calibrated to THIS device with the clocks LOCKED (nvidia-smi: core 1500 MHz, VRAM
+# 5501 MHz), which removes the idle-underclock / power-cap DVFS variability -- now the
+# compute-roof and GEMM measurements share one clock. Re-measured at the locked point
+# (membench.cu, gpu_boost_probe.cu, occupancy_bw.cu):
+#   * SM clock       : 1500 MHz (locked, holds under load and at idle).
+#   * tensor rate    : 128 FLOP/clk/core for FP16->FP32 on consumer Ada -> 96*128*1.5e9
+#                      = 18.4 TFLOP/s roof; measured cuBLAS 4096^3 = 17.4 TFLOP/s (95%).
+#   * DRAM bandwidth : 170 GB/s achievable (read-stream, 512 MiB >> L2) at VRAM 5501 MHz
+#                      -- lower than the 218 seen at the 8001 MHz boost, and vs 256 spec.
+#   * DRAM latency   : 393 ns (pointer-chase) = 590 cycles @ 1.50 GHz.
 RTX4060_MEASURED = replace(
     RTX4060_LAPTOP,
-    name="RTX 4060 Laptop (measured/calibrated)",
+    name="RTX 4060 Laptop (locked 1500/5501, measured)",
     clock_hz=1500e6,
     tensor_flops_per_core_per_clock=128.0,
-    bw_bytes_per_s=218e9,
-    hbm_latency_cycles=512,
+    bw_bytes_per_s=170e9,
+    hbm_latency_cycles=590,
 )
 
 GPUS: dict[str, GpuModel] = {
@@ -195,6 +193,51 @@ def optimal_mapping(m: int, n: int, k: int, gpu: GpuModel) -> Mapping:
     return Mapping(bm=mp.m0, bn=mp.n0, bk=mp.k0, loop_order=mp.loop_order)
 
 
+# Default tile floor for the estimator's "optimal" search. Sub-64 tiles look
+# artificially good until the tile-size compute-efficiency term lands (see TODO.md);
+# BM,BN>=64 is the crude stand-in that keeps the search in tensor-sensible territory.
+OPTIMAL_MIN_BM = 64
+OPTIMAL_MIN_BN = 64
+OPTIMAL_MIN_BK = 32
+
+
+def optimal_mapping_by_time(m, n, k, gpu, *, min_bm=OPTIMAL_MIN_BM, min_bn=OPTIMAL_MIN_BN,
+                            min_bk=OPTIMAL_MIN_BK, split_k=1, orders=None, **kwargs):
+    """Estimator-optimal mapping = the min estimated-TIME tiling over tensor-sensible
+    tiles (BM>=min_bm, BN>=min_bn, BK>=min_bk), trying each candidate loop order and
+    letting the pipeline depth C auto-pick. Returns (Mapping, Estimate) for the winner.
+
+    This is the default meaning of "estimator optimal" (unlike the traffic-only
+    optimal_mapping()); it minimizes the roofline time, so it reflects occupancy and
+    the compute roof, not just HBM traffic.
+    """
+    if orders is None:
+        orders = AUTO_LOOP_ORDERS
+    workload = GemmWorkload(m=m, k=k, n=n, bytes_per_element=gpu.bytes_per_element)
+    lo_bm, lo_bn, lo_bk = min(min_bm, m), min(min_bn, n), min(min_bk, k)
+    best_e, best_map = None, None
+    for p in enumerate_mappings(workload):
+        mp = p.mapping
+        if mp.m0 < lo_bm or mp.n0 < lo_bn or mp.k0 < lo_bk:
+            continue
+        cand = Mapping(bm=mp.m0, bn=mp.n0, bk=mp.k0, loop_order=mp.loop_order,
+                       num_stages=None, split_k=split_k)
+        try:
+            e, order = estimate_best_order(m, n, k, cand, gpu, orders=orders, **kwargs)
+        except ValueError:
+            continue
+        if not e.fits_smem:
+            continue
+        if best_e is None or e.time_s < best_e.time_s:
+            best_e = e
+            best_map = replace(cand, loop_order=order, num_stages=e.num_stages)
+    if best_map is None:
+        raise ValueError(
+            f"no tile with BM>={min_bm}, BN>={min_bn}, BK>={min_bk} fits the SMEM budget"
+        )
+    return best_map, best_e
+
+
 def parse_loop_order(text: str) -> tuple[str, str, str]:
     """Accept 'MKN' or 'M-K-N' / 'M,K,N' -> ('M', 'K', 'N')."""
     cleaned = text.upper().replace("-", "").replace(",", "").replace(" ", "")
@@ -204,6 +247,30 @@ def parse_loop_order(text: str) -> tuple[str, str, str]:
     if order not in LOOP_ORDERS:
         raise ValueError(f"unsupported loop order {order}; must be one of {LOOP_ORDERS}")
     return order  # type: ignore[return-value]
+
+
+# Loop orders tried when the caller asks for the fastest (--order auto). M-N-K keeps an
+# A row-panel resident and re-reads B; N-M-K keeps a B column-panel resident in L2 and
+# re-reads A. A real kernel picks its rasterization to minimize re-reads (CUTLASS
+# rasterizes N-major, i.e. like N-M-K), so evaluating both and taking the faster models
+# "whichever order the kernel would actually use" rather than a fixed guess.
+AUTO_LOOP_ORDERS: tuple[tuple[str, str, str], ...] = (("M", "N", "K"), ("N", "M", "K"))
+
+
+def estimate_best_order(m, n, k, mapping, gpu=None, orders=AUTO_LOOP_ORDERS, **kwargs):
+    """Estimate `mapping` under each candidate loop order; return (best Estimate, order).
+
+    `mapping`'s own loop_order is ignored (overridden by each candidate). Ties break
+    toward the first order listed.
+    """
+    if gpu is None:
+        gpu = RTX4060_LAPTOP
+    best_e, best_order = None, None
+    for order in orders:
+        e = estimate_gemm_time(m, n, k, replace(mapping, loop_order=order), gpu, **kwargs)
+        if best_e is None or e.time_s < best_e.time_s:
+            best_e, best_order = e, order
+    return best_e, best_order
 
 
 # --------------------------------------------------------------------------- #
@@ -609,15 +676,24 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--bm", type=int, help="tile BM (m0), must divide M")
     p.add_argument("--bn", type=int, help="tile BN (n0), must divide N")
     p.add_argument("--bk", type=int, help="tile BK (k0), must divide K")
-    p.add_argument("--order", default="MKN", help="loop order, e.g. MKN or M-K-N")
+    p.add_argument("--order", default="MKN",
+                   help="loop order, e.g. MKN or M-K-N; or 'auto' to try M-N-K and "
+                        "N-M-K and report whichever is faster")
     p.add_argument("--stages", type=int, default=None,
                    help="software-pipeline depth C (default: auto smallest-optimal)")
     p.add_argument("--splitk", type=int, default=1,
                    help="split-K slices S (default 1 = disabled); partitions the K "
                         "reduction across S threadblocks + a partial-sum reduction")
     p.add_argument("--optimal", action="store_true",
-                   help="ignore --bm/--bn/--bk/--order and use the snowcat min-traffic "
-                        "mapping that fits SMEM")
+                   help="ignore --bm/--bn/--bk/--order and search for the optimal mapping "
+                        "(see --optimal-metric)")
+    p.add_argument("--optimal-metric", choices=("time", "traffic"), default="time",
+                   help="'time' (default): min estimated TIME over tensor-sensible tiles "
+                        "(BM,BN>=64, BK>=32, best loop order). 'traffic': legacy snowcat "
+                        "min-HBM-traffic tile")
+    p.add_argument("--min-bm", type=int, default=OPTIMAL_MIN_BM, help="--optimal time: BM floor")
+    p.add_argument("--min-bn", type=int, default=OPTIMAL_MIN_BN, help="--optimal time: BN floor")
+    p.add_argument("--min-bk", type=int, default=OPTIMAL_MIN_BK, help="--optimal time: BK floor")
     p.add_argument("--clock-mhz", type=float, default=None,
                    help="override SM clock in MHz (e.g. a sustained laptop boost)")
     p.add_argument("--no-occupancy-bw", dest="occupancy_bw", action="store_false",
@@ -656,7 +732,26 @@ def main() -> None:
             "(or pass --demo)"
         )
 
-    if args.optimal:
+    pin = tuple(p.strip().upper() for p in args.pin.split(",") if p.strip())
+    bad_pins = [p for p in pin if p not in _OPERAND_DIMS]
+    if bad_pins:
+        raise SystemExit(f"--pin operands must be among A,W,OUT; got {bad_pins}")
+    kw = dict(occupancy_derate=args.occupancy_bw, l2=args.l2, l2_alpha=args.l2_alpha, pin=pin)
+    auto_order = args.order.strip().lower() in ("auto", "best")
+
+    # --optimal, time metric (default): search min estimated time over sensible tiles.
+    if args.optimal and args.optimal_metric == "time":
+        mapping, e = optimal_mapping_by_time(
+            args.m, args.n, args.k, gpu,
+            min_bm=args.min_bm, min_bn=args.min_bn, min_bk=args.min_bk,
+            split_k=args.splitk, **kw)
+        print(format_estimate(e))
+        print(f"  [estimator-optimal by TIME over BM>={args.min_bm}, BN>={args.min_bn}, "
+              f"BK>={args.min_bk}:  {mapping.bm}x{mapping.bn}x{mapping.bk}  "
+              f"stages={mapping.num_stages}  order={'-'.join(mapping.loop_order)}]")
+        return
+
+    if args.optimal:  # traffic metric (legacy)
         mapping = optimal_mapping(args.m, args.n, args.k, gpu)
         mapping = replace(
             mapping,
@@ -666,17 +761,17 @@ def main() -> None:
     else:
         mapping = Mapping(
             bm=args.bm, bn=args.bn, bk=args.bk,
-            loop_order=parse_loop_order(args.order), num_stages=args.stages,
-            split_k=args.splitk,
+            loop_order=(("M", "N", "K") if auto_order else parse_loop_order(args.order)),
+            num_stages=args.stages, split_k=args.splitk,
         )
-    pin = tuple(p.strip().upper() for p in args.pin.split(",") if p.strip())
-    bad_pins = [p for p in pin if p not in _OPERAND_DIMS]
-    if bad_pins:
-        raise SystemExit(f"--pin operands must be among A,W,OUT; got {bad_pins}")
-    e = estimate_gemm_time(args.m, args.n, args.k, mapping, gpu,
-                           occupancy_derate=args.occupancy_bw,
-                           l2=args.l2, l2_alpha=args.l2_alpha, pin=pin)
-    print(format_estimate(e))
+    if auto_order:
+        e, won = estimate_best_order(args.m, args.n, args.k, mapping, gpu, **kw)
+        print(format_estimate(e))
+        cand = ", ".join("-".join(o) for o in AUTO_LOOP_ORDERS)
+        print(f"  [auto loop order: {'-'.join(won)} was fastest of {{{cand}}}]")
+    else:
+        e = estimate_gemm_time(args.m, args.n, args.k, mapping, gpu, **kw)
+        print(format_estimate(e))
 
 
 if __name__ == "__main__":
