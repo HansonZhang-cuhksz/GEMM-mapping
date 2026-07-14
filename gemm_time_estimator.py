@@ -126,9 +126,36 @@ RTX4060_MEASURED = replace(
     hbm_latency_cycles=590,
 )
 
+# NVIDIA H100 SXM5 — SPEC-SHEET profile (analytical what-if; nothing measured here).
+#   * 132 SMs x 4 tensor cores = 528; 4th-gen TC = 1024 dense FP16 FLOP/clk/core
+#     (FP32 accumulate) -> 528 * 1024 * 1.83 GHz = 989 TFLOP/s dense (datasheet).
+#   * HBM3 3.35 TB/s; L2 = 50 MB (2x25 MB partitioned; alpha absorbs partitioning).
+#   * SMEM 228 KB/SM, 227 KB/block opt-in.
+#   * HBM latency ~700 cycles (~383 ns) from published microbenchmark literature.
+#   * bw_saturation_sms=26: ASSUMPTION — same ~20%-of-SMs saturation fraction we
+#     measured on the 4060. Both estimators share this constant, so cross-MODEL
+#     comparisons are insensitive to it; absolute times are not.
+#   Ridge OI = 989e12/3.35e12 ~ 295 FLOP/B (vs ~108 on the locked 4060) — far more
+#   shapes are memory-bound, so the traffic model actually matters here.
+H100_SXM = GpuModel(
+    name="NVIDIA H100 SXM5 (spec-sheet, analytical)",
+    num_sm=132,
+    tensor_cores=528,
+    tensor_flops_per_core_per_clock=1024.0,
+    clock_hz=1830e6,
+    bw_bytes_per_s=3.35e12,
+    smem_per_block_bytes=227 * 1024,
+    smem_per_sm_bytes=228 * 1024,
+    hbm_latency_cycles=700,
+    bytes_per_element=2,
+    l2_bytes=50 * 1024 * 1024,
+    bw_saturation_sms=26.0,
+)
+
 GPUS: dict[str, GpuModel] = {
     "rtx4060-laptop": RTX4060_LAPTOP,
     "rtx4060-measured": RTX4060_MEASURED,
+    "h100-sxm": H100_SXM,
 }
 
 # L2/L1 lines are 128 B = 4 x 32 B sectors; DRAM traffic is counted in 32 B sectors
@@ -384,6 +411,11 @@ class Estimate:
         return self.ops / self.time_s / 1e12 if self.time_s > 0 else float("nan")
 
 
+# CUTLASS's multistage mainloop needs at least a double buffer: num_stages=1 has no
+# valid pipeline (measured -> NaN on hardware), so every GEMM uses C >= 2.
+MIN_NUM_STAGES = 2
+
+
 def _auto_num_stages(gpu: GpuModel, w: int) -> tuple[int, int]:
     """Smallest-optimal pipeline depth C and the max feasible depth (notes model)."""
     c_max = gpu.smem_per_block_bytes // w
@@ -487,17 +519,19 @@ def estimate_gemm_time(
     # ---- pipeline depth C -------------------------------------------------- #
     c_best_auto, c_max = _auto_num_stages(gpu, w)
     if mapping.num_stages is None:
-        c = c_best_auto
-        if c == 0:
+        c = max(MIN_NUM_STAGES, c_best_auto)   # CUTLASS multistage floor is 2 stages
+        if c_best_auto == 0:
             notes.append(
                 f"working set W={w} B exceeds SMEM/block={gpu.smem_per_block_bytes} B; "
-                "even C=1 does not fit."
+                f"even C=1 does not fit (using the C={MIN_NUM_STAGES} floor anyway)."
             )
-            c = 1
     else:
         c = mapping.num_stages
-        if c < 1:
-            raise ValueError("num_stages must be >= 1")
+        if c < MIN_NUM_STAGES:
+            raise ValueError(
+                f"num_stages must be >= {MIN_NUM_STAGES} (CUTLASS multistage floor; "
+                "num_stages=1 has no valid pipeline)"
+            )
 
     fits_smem = c * w <= gpu.smem_per_block_bytes
     if not fits_smem:
@@ -680,7 +714,7 @@ def _parse_args() -> argparse.Namespace:
                    help="loop order, e.g. MKN or M-K-N; or 'auto' to try M-N-K and "
                         "N-M-K and report whichever is faster")
     p.add_argument("--stages", type=int, default=None,
-                   help="software-pipeline depth C (default: auto smallest-optimal)")
+                   help="software-pipeline depth C, must be >=2 (default: auto smallest-optimal, floored at 2)")
     p.add_argument("--splitk", type=int, default=1,
                    help="split-K slices S (default 1 = disabled); partitions the K "
                         "reduction across S threadblocks + a partial-sum reduction")
@@ -718,6 +752,12 @@ def main() -> None:
     gpu = GPUS[args.gpu]
     if args.clock_mhz is not None:
         gpu = replace(gpu, clock_hz=args.clock_mhz * 1e6)
+
+    if args.stages is not None and args.stages < MIN_NUM_STAGES:
+        raise SystemExit(
+            f"--stages must be >= {MIN_NUM_STAGES} (CUTLASS multistage floor; "
+            "num_stages=1 has no valid pipeline)"
+        )
 
     if args.demo:
         run_demo(gpu, occupancy_derate=args.occupancy_bw,

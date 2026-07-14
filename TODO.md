@@ -29,13 +29,39 @@ rasterization / L2 B-column reuse). Fixed 64×64 from 0.402 (1.31× over) to 0.2
 (0.86×) and corrected the 64×64-vs-128×256 ranking. See `estimate_best_order`.
 
 ## [ ] num_stages has no effect on the estimate (stage benefit unmodeled)
-The estimator's time is flat across C=1..6 (64x64x32 all give 0.262 ms), because the
+[done] num_stages=1 is now rejected and auto-pick floors at MIN_NUM_STAGES=2 (CUTLASS
+multistage floor; stage-1 measured -> NaN). The *efficiency-vs-stages* term below is
+still open.
+
+The estimator's time is flat across C=2..6 (64x64x32 all give the same ms), because the
 saturating-BW model no longer uses `inflight = active_sm*C*W`. So the estimator can't
 pick a pipeline depth — it defaults to the smallest feasible C=1, while CUTLASS's
 auto-tune uses stages=4 (deeper pipelining overlaps cp.async loads / feeds the tensor
 cores better even when latency is nominally hidden). Needs a term that rewards deeper
 pipelines up to a point (then penalizes SMEM pressure / occupancy loss). Tiles already
 AGREE (both 64x64x32); this is the remaining mapping-parameter disagreement.
+
+MEASURED (64x64x32, fp16, locked clocks, fair vs cuBLAS, stable over 3 runs):
+  stages: 1->FAIL(NaN; CUTLASS floor is 2)  2->0.88x  3->0.93x  4->0.935x  5->0.925x
+So achieved tensor throughput rises ~6% from stg2 to stg3/4 then dips at 5. Mechanism:
+deeper pipeline hides the on-chip global->shared->register load latency so the tensor
+cores never stall between MMAs (a COMPUTE-side overlap effect, NOT DRAM BW/latency --
+that saturates regardless of stages). The roofline's max(compute,memory) assumes
+perfect overlap, so it's blind to this. Fix: compute_efficiency(stages) factor with
+this shape (plateau ~3-4, floor at 2, invalid at 1).
+
+## [ ] Count the C write at its real width (fp32), not bytes_per_element
+Both estimators charge all three operands at bpe=2, but the kernel writes fp32 C
+(4 B/elem). Validation shows this is the largest single error on C-heavy shapes:
+short-K256 (4096x4096x256) est/meas = 0.68x, the worst of the 10-shape suite.
+Fix: OUT traffic = M*N*output_bytes (4), keep A/B at bpe. Cheap and principled.
+
+## [ ] Wide/tall asymmetry in the snowcat L2 traffic model
+Measured wide (1024x8192x2048) and tall (8192x1024x2048) are symmetric (2.510 vs
+2.512 ms) but snowcat predicts 1.879 vs 2.427: the M/BM-driven B re-read survives
+its L2 model while the mirrored N/BN-driven A re-read is absorbed. One of the two
+is wrong (probably both slightly). Check _reuse_distance_bytes/_l2_concurrency
+operand asymmetry against ncu dram__bytes.
 
 ## [ ] Traffic / L2 model vs real rasterization (related, lower priority)
 `--order auto` covers the M-N-K/N-M-K choice, but the L2 reuse-distance model's

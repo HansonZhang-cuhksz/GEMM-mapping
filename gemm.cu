@@ -425,6 +425,14 @@ static void run_all_mappings(std::vector<BenchResult>& results) {
   reg.add<GemmMappingSplitKT<E,  64,128,32, 32,64,32, 16,8,16, 2, 1>>("nbr_tb64x128_splitK3", 1, 3);
   reg.add<GemmMappingSplitKT<E, 128,128,32, 64,64,32, 16,8,16, 2, 2>>("nbr_s2_splitK3_swz2", 2, 3);
 
+  // ---- 64x64x32 num_stages sweep (num_stages experiment; CUTLASS multistage
+  //      floor is 2 stages, so stg1 may be reported not-implementable) ----
+  reg.add<GemmMappingT<E, 64,64,32, 32,32,32, 16,8,16, 1, 1>>("s64stg1", 1);
+  reg.add<GemmMappingT<E, 64,64,32, 32,32,32, 16,8,16, 2, 1>>("s64stg2", 1);
+  reg.add<GemmMappingT<E, 64,64,32, 32,32,32, 16,8,16, 3, 1>>("s64stg3", 1);
+  reg.add<GemmMappingT<E, 64,64,32, 32,32,32, 16,8,16, 4, 1>>("s64stg4", 1);
+  reg.add<GemmMappingT<E, 64,64,32, 32,32,32, 16,8,16, 5, 1>>("s64stg5", 1);
+
   // ---- SNOWCAT's estimated-optimal mapping (min-traffic tile from the roofline
   //      estimator, gemm_time_estimator.py --optimal): tile 128x256xBK, no split-K,
   //      C=1. Snowcat picks BK=16, but CUTLASS 2.x needs WarpK>=32 (kWarpGemm-
