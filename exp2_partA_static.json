@@ -1,0 +1,35 @@
+[
+ {
+  "hidden": 512,
+  "gemm_only_ms": 3.942399844527245e-05,
+  "unfused_ms": 5.222399905323982e-05,
+  "compiled_ms": 8.499199897050858e-05,
+  "maxautotune_ms": 0.00016947199404239655,
+  "ceiling_pct": 24.50980553005601,
+  "realized_pct": -62.745099018294994,
+  "best_beats_eager": false,
+  "correct": true
+ },
+ {
+  "hidden": 1024,
+  "gemm_only_ms": 8.268799632787704e-05,
+  "unfused_ms": 0.00010444799810647964,
+  "compiled_ms": 0.00012825599312782287,
+  "maxautotune_ms": 0.00022630399465560914,
+  "ceiling_pct": 20.833335413876807,
+  "realized_pct": -22.794113293652735,
+  "best_beats_eager": false,
+  "correct": true
+ },
+ {
+  "hidden": 2048,
+  "gemm_only_ms": 0.00020326399803161622,
+  "unfused_ms": 0.00024371199309825898,
+  "compiled_ms": 0.0002703360021114349,
+  "maxautotune_ms": 0.00037350401282310486,
+  "ceiling_pct": 16.596637101209488,
+  "realized_pct": -10.92437375555899,
+  "best_beats_eager": false,
+  "correct": true
+ }
+]

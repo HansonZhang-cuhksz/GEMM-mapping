@@ -1,0 +1,15 @@
+{
+ "a_addmm_max_abs_diff": 4.0,
+ "a_addmm_max_rel_diff": 7.476806163787842,
+ "a_kernels_mm": 1.0,
+ "a_kernels_addmm": 2.0,
+ "a_kernels_mm_add": 2.0,
+ "a_t_mm": 0.0019275519847869872,
+ "a_t_addmm": 0.0020110080242156983,
+ "a_t_mm_add": 0.0019811840057373047,
+ "a_baddbmm_max_abs_diff": 2.0,
+ "a_kernels_baddbmm": 2.0,
+ "a_t_bmm": 0.009326975822448732,
+ "a_t_baddbmm": 0.009623807907104492,
+ "a_t_bmm_add": 0.009589120388031006
+}

@@ -1,0 +1,179 @@
+<title>Prefill fusion configuration throughput</title>
+<style>
+:root {
+  --surface: #fcfcfb; --panel: #ffffff; --ink: #14181d; --muted: #5c6570; --faint: #8b95a1;
+  --grid: #e9ebef; --hair: #e0e3e8; --amort: #1f9e8f; --f6: #d1615d; --best: #3a6fd0;
+  --amort-soft: rgba(31,158,143,.30); --f6-soft: rgba(209,97,93,.42);
+  --shadow: 0 1px 2px rgba(20,24,29,.06), 0 8px 24px rgba(20,24,29,.05);
+}
+@media (prefers-color-scheme: dark) { :root {
+  --surface: #0f1319; --panel: #151a21; --ink: #e7eaef; --muted: #939eaa; --faint: #6b7684;
+  --grid: #222932; --hair: #2a323c; --amort: #35a898; --f6: #d9706c; --best: #5580dd;
+  --amort-soft: rgba(53,168,152,.34); --f6-soft: rgba(217,112,108,.44);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35); } }
+:root[data-theme="light"] {
+  --surface: #fcfcfb; --panel: #ffffff; --ink: #14181d; --muted: #5c6570; --faint: #8b95a1;
+  --grid: #e9ebef; --hair: #e0e3e8; --amort: #1f9e8f; --f6: #d1615d; --best: #3a6fd0;
+  --amort-soft: rgba(31,158,143,.30); --f6-soft: rgba(209,97,93,.42);
+  --shadow: 0 1px 2px rgba(20,24,29,.06), 0 8px 24px rgba(20,24,29,.05); }
+:root[data-theme="dark"] {
+  --surface: #0f1319; --panel: #151a21; --ink: #e7eaef; --muted: #939eaa; --faint: #6b7684;
+  --grid: #222932; --hair: #2a323c; --amort: #35a898; --f6: #d9706c; --best: #5580dd;
+  --amort-soft: rgba(53,168,152,.34); --f6-soft: rgba(217,112,108,.44);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35); }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased; line-height: 1.55; }
+.wrap { max-width: 1000px; margin: 0 auto; padding: 44px 24px 72px; }
+.mono { font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace; }
+.eyebrow { font-size: 12px; letter-spacing: .13em; text-transform: uppercase; color: var(--faint); font-weight: 600; font-family: ui-monospace, monospace; }
+h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.08; margin: 10px 0 8px; letter-spacing: -.02em; text-wrap: balance; font-weight: 680; }
+.lede { font-size: 17px; color: var(--muted); max-width: 64ch; margin: 0; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 32px 0 8px; }
+@media (max-width: 680px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat { background: var(--panel); border: 1px solid var(--hair); border-radius: 12px; padding: 16px 16px 14px; }
+.stat .k { font-size: 12px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; font-weight: 600; }
+.stat .v { font-size: 26px; font-weight: 680; margin-top: 6px; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.stat .u { font-size: 13px; color: var(--muted); font-weight: 500; }
+.card { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 22px 22px 10px; margin-top: 22px; box-shadow: var(--shadow); }
+.card h2 { font-size: 15px; margin: 0; font-weight: 660; }
+.card .sub { font-size: 13px; color: var(--muted); margin: 3px 0 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 4px 0 6px; font-size: 13px; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); }
+.swatch { width: 22px; height: 3px; border-radius: 2px; flex: none; }
+.swatch.dash { height: 0; border-top: 2px dashed var(--faint); }
+svg { width: 100%; height: auto; display: block; touch-action: none; }
+.tick { font-size: 11px; fill: var(--faint); font-family: ui-monospace, monospace; }
+.axtitle { font-size: 12px; fill: var(--muted); font-weight: 600; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--hair); border-radius: 10px; padding: 9px 11px; font-size: 12.5px; box-shadow: var(--shadow); opacity: 0; transition: opacity .08s; min-width: 178px; }
+.tip .b { font-weight: 680; font-variant-numeric: tabular-nums; }
+.tip .row { display: flex; justify-content: space-between; gap: 14px; margin-top: 3px; color: var(--muted); }
+.tip .row b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.note { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; margin-top: 22px; }
+@media (max-width: 680px) { .note { grid-template-columns: 1fr; } }
+.take { background: var(--panel); border: 1px solid var(--hair); border-radius: 16px; padding: 20px 22px; }
+.take h3 { margin: 0 0 8px; font-size: 14px; }
+.take p { margin: 0 0 10px; font-size: 14.5px; color: var(--ink); }
+.take .win { color: var(--best); font-weight: 640; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: right; padding: 6px 8px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--faint); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+td.name { font-family: ui-monospace, monospace; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+footer { margin-top: 30px; font-size: 12.5px; color: var(--faint); }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">GLM-5.2 MoE · prefill (incl. O(T²) attention) · H100 · snowcat-roofline estimation</div>
+  <h1>Prefill: every fusion configuration, ranked by throughput</h1>
+  <p class="lede">The same 40 configurations as decode, but the layer now carries the full causal
+  attention core. Throughput rises with sequence length — then <b>falls</b> as O(T²) attention takes
+  over, and the fusion advantage fades with it. Tokens per second; higher is better.</p>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Best config</div><div class="v mono">S3-N4-r2f</div><div class="u">same as decode</div></div>
+    <div class="stat"><div class="k">Peak throughput</div><div class="v">0.748<span class="u"> Mtok/s</span></div><div class="u">at 10,240 tokens</div></div>
+    <div class="stat"><div class="k">Fusion gain (peak)</div><div class="v">+5<span class="u">%</span></div><div class="u">vs unfused; fades at long T</div></div>
+    <div class="stat"><div class="k">vs best on-chip FFN</div><div class="v">3.2×</div><div class="u">F6 worst family</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Throughput vs sequence length (prefill tokens)</h2>
+    <div class="sub">Each line is one configuration. Throughput peaks near 10,240 tokens, then declines as the O(T²) attention core dominates. Two families: amortized GEMMs vs on-chip F6.</div>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--best)"></span> Best — S3-N4-r2f</span>
+      <span><span class="swatch" style="background:var(--amort)"></span> Amortized GEMMs (30)</span>
+      <span><span class="swatch" style="background:var(--f6)"></span> On-chip F6 (10)</span>
+      <span><span class="swatch dash"></span> Fully unfused</span>
+    </div>
+    <div style="position:relative">
+      <svg id="chart" viewBox="0 0 900 430" role="img" aria-label="Prefill throughput versus sequence length for all fusion configurations"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <div class="take">
+      <h3>Prefill vs decode</h3>
+      <p>The winner is the <span class="win mono">same config as decode</span> — fold all four vector
+      ops into GEMM epilogues, keep up_gate and down as weight-amortized grouped GEMMs. But fusion is
+      worth <b>less</b> in prefill: a peak of <b>+5%</b> near 10k tokens,
+      shrinking toward ~+1% at 128k — versus <b>+6%</b> in decode.</p>
+      <p style="color:var(--muted);font-size:13.5px">Two reasons: (1) the <b>O(T²) attention</b> grows
+      from ~0% of the layer at 512 tokens to <b>~78%</b> at 128k, diluting the FFN the fusion targets;
+      (2) at prefill scale the FFN GEMMs are <b>compute-bound</b> (tokens/expert = T/32 is large), so the
+      eliminated vector kernels hide under the GEMM math. On-chip F6 is still the worst (~3× off).</p>
+    </div>
+    <div class="take">
+      <h3>Top &amp; bottom</h3>
+      <table id="rank"><thead><tr><th>config</th><th>peak Mtok/s</th><th>@ tokens</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <footer>Analytical snowcat-roofline estimate. Attention core modeled as causal flash (N_HEADS·T²·(qk 192 + v 256),
+  compute-bound). Layer = attention prefix + mla_o → router → FFN → residual₂; the prefix is uniform across all 40
+  configs, so it shifts absolute throughput but not the ranking. Peak token count is tile-quantization-sensitive.</footer>
+</div>
+
+<script>
+const DATA = {"batches": [512, 1024, 1536, 2048, 3072, 4096, 6144, 8192, 10240, 11264, 12288, 14336, 16384, 24576, 32768, 49152, 65536, 98304, 131072], "configs": [{"name": "S1-N0-r2s", "fam": "amort", "tput": [0.084, 0.1597, 0.2302, 0.2893, 0.3986, 0.4746, 0.6029, 0.6574, 0.7152, 0.7183, 0.7064, 0.6777, 0.6356, 0.5659, 0.4875, 0.4029, 0.3334, 0.2561, 0.2042], "best": false, "unfused": true}, {"name": "S1-N0-r2f", "fam": "amort", "tput": [0.084, 0.1599, 0.2305, 0.2899, 0.3998, 0.4763, 0.6056, 0.6606, 0.7189, 0.7221, 0.71, 0.6811, 0.6386, 0.5682, 0.4893, 0.4041, 0.3342, 0.2566, 0.2045], "best": false, "unfused": false}, {"name": "S1-N4-r2s", "fam": "amort", "tput": [0.0843, 0.1607, 0.2322, 0.2926, 0.4049, 0.4836, 0.6175, 0.6748, 0.7358, 0.7337, 0.7213, 0.6915, 0.6477, 0.5754, 0.4946, 0.4078, 0.3367, 0.258, 0.2054], "best": false, "unfused": false}, {"name": "S1-N4-r2f", "fam": "amort", "tput": [0.0843, 0.1609, 0.2326, 0.2933, 0.4061, 0.4853, 0.6203, 0.6781, 0.7397, 0.7377, 0.7251, 0.695, 0.6508, 0.5779, 0.4964, 0.409, 0.3376, 0.2585, 0.2057], "best": false, "unfused": false}, {"name": "S1-N5-r2s", "fam": "amort", "tput": [0.0841, 0.1602, 0.2312, 0.291, 0.4017, 0.4791, 0.6101, 0.666, 0.7253, 0.7285, 0.7203, 0.6915, 0.6477, 0.5754, 0.4946, 0.4077, 0.3367, 0.258, 0.2054], "best": false, "unfused": false}, {"name": "S1-N5-r2f", "fam": "amort", "tput": [0.0842, 0.1604, 0.2316, 0.2916, 0.4029, 0.4808, 0.6129, 0.6692, 0.7292, 0.7324, 0.7242, 0.695, 0.6508, 0.5779, 0.4964, 0.409, 0.3375, 0.2585, 0.2057], "best": false, "unfused": false}, {"name": "S1-N6-r2s", "fam": "f6", "tput": [0.0844, 0.1612, 0.2333, 0.1609, 0.231, 0.1594, 0.2264, 0.1564, 0.1893, 0.204, 0.2178, 0.1532, 0.1509, 0.2023, 0.1408, 0.1768, 0.1242, 0.1413, 0.1005], "best": false, "unfused": false}, {"name": "S1-N6-r2f", "fam": "f6", "tput": [0.0845, 0.1614, 0.2337, 0.1611, 0.2314, 0.1596, 0.2268, 0.1566, 0.1895, 0.2043, 0.2182, 0.1533, 0.1511, 0.2026, 0.1409, 0.177, 0.1243, 0.1414, 0.1006], "best": false, "unfused": false}, {"name": "S2-N0-r2s", "fam": "amort", "tput": [0.084, 0.1599, 0.2307, 0.2899, 0.4004, 0.4763, 0.607, 0.6606, 0.7208, 0.724, 0.7119, 0.6639, 0.6386, 0.5694, 0.4893, 0.4047, 0.3342, 0.2568, 0.2045], "best": false, "unfused": false}, {"name": "S2-N0-r2f", "fam": "amort", "tput": [0.0841, 0.1601, 0.2311, 0.2905, 0.4015, 0.478, 0.6097, 0.6638, 0.7247, 0.7279, 0.7156, 0.6672, 0.6416, 0.5718, 0.4911, 0.4059, 0.335, 0.2573, 0.2048], "best": false, "unfused": false}, {"name": "S2-N4-r2s", "fam": "amort", "tput": [0.0843, 0.1609, 0.2328, 0.2933, 0.4067, 0.4853, 0.6217, 0.6781, 0.7418, 0.7397, 0.7271, 0.6771, 0.6508, 0.5791, 0.4964, 0.4096, 0.3376, 0.2588, 0.2057], "best": false, "unfused": false}, {"name": "S2-N4-r2f", "fam": "amort", "tput": [0.0844, 0.1611, 0.2332, 0.2939, 0.4079, 0.4871, 0.6246, 0.6815, 0.7458, 0.7437, 0.731, 0.6805, 0.6539, 0.5816, 0.4982, 0.4109, 0.3384, 0.2593, 0.206], "best": false, "unfused": false}, {"name": "S2-N5-r2s", "fam": "amort", "tput": [0.0842, 0.1604, 0.2318, 0.2916, 0.4035, 0.4808, 0.6143, 0.6692, 0.7312, 0.7344, 0.7261, 0.6771, 0.6508, 0.5791, 0.4964, 0.4096, 0.3375, 0.2588, 0.2057], "best": false, "unfused": false}, {"name": "S2-N5-r2f", "fam": "amort", "tput": [0.0842, 0.1606, 0.2322, 0.2922, 0.4047, 0.4825, 0.617, 0.6725, 0.7351, 0.7384, 0.73, 0.6805, 0.6539, 0.5816, 0.4982, 0.4108, 0.3384, 0.2593, 0.206], "best": false, "unfused": false}, {"name": "S2-N6-r2s", "fam": "f6", "tput": [0.0845, 0.1614, 0.2339, 0.1611, 0.2316, 0.1596, 0.227, 0.1566, 0.1897, 0.2045, 0.2184, 0.1525, 0.1511, 0.2028, 0.1409, 0.1771, 0.1243, 0.1415, 0.1006], "best": false, "unfused": false}, {"name": "S2-N6-r2f", "fam": "f6", "tput": [0.0845, 0.1616, 0.2343, 0.1613, 0.232, 0.1598, 0.2273, 0.1568, 0.1899, 0.2048, 0.2187, 0.1526, 0.1512, 0.2031, 0.1411, 0.1774, 0.1244, 0.1416, 0.1006], "best": false, "unfused": false}, {"name": "S3-N0-r2s", "fam": "amort", "tput": [0.0841, 0.16, 0.2309, 0.2902, 0.4009, 0.4771, 0.6083, 0.6622, 0.7228, 0.7259, 0.7138, 0.6655, 0.6401, 0.5706, 0.4902, 0.4053, 0.3346, 0.2571, 0.2046], "best": false, "unfused": false}, {"name": "S3-N0-r2f", "fam": "amort", "tput": [0.0841, 0.1602, 0.2313, 0.2909, 0.4021, 0.4788, 0.611, 0.6654, 0.7266, 0.7298, 0.7175, 0.6688, 0.6431, 0.573, 0.4919, 0.4065, 0.3355, 0.2576, 0.2049], "best": false, "unfused": false}, {"name": "S3-N4-r2s", "fam": "amort", "tput": [0.0843, 0.161, 0.233, 0.2936, 0.4073, 0.4862, 0.6231, 0.6798, 0.7438, 0.7417, 0.729, 0.6788, 0.6523, 0.5803, 0.4973, 0.4103, 0.338, 0.259, 0.2059], "best": false, "unfused": false}, {"name": "S3-N4-r2f", "fam": "amort", "tput": [0.0844, 0.1612, 0.2334, 0.2942, 0.4086, 0.4879, 0.626, 0.6832, 0.7479, 0.7458, 0.7329, 0.6822, 0.6555, 0.5828, 0.4991, 0.4115, 0.3388, 0.2595, 0.2062], "best": true, "unfused": false}, {"name": "S3-N5-r2s", "fam": "amort", "tput": [0.0842, 0.1605, 0.232, 0.2919, 0.4041, 0.4816, 0.6156, 0.6709, 0.7331, 0.7364, 0.728, 0.6788, 0.6523, 0.5803, 0.4973, 0.4102, 0.3379, 0.259, 0.2059], "best": false, "unfused": false}, {"name": "S3-N5-r2f", "fam": "amort", "tput": [0.0843, 0.1607, 0.2324, 0.2925, 0.4053, 0.4833, 0.6184, 0.6742, 0.7371, 0.7404, 0.7319, 0.6822, 0.6555, 0.5828, 0.4991, 0.4114, 0.3388, 0.2595, 0.2062], "best": false, "unfused": false}, {"name": "S3-N6-r2s", "fam": "f6", "tput": [0.0845, 0.1615, 0.2341, 0.1612, 0.2318, 0.1597, 0.2272, 0.1567, 0.1898, 0.2046, 0.2185, 0.1525, 0.1512, 0.2029, 0.141, 0.1773, 0.1244, 0.1415, 0.1006], "best": false, "unfused": false}, {"name": "S3-N6-r2f", "fam": "f6", "tput": [0.0845, 0.1617, 0.2345, 0.1614, 0.2322, 0.1599, 0.2275, 0.1569, 0.1901, 0.2049, 0.2189, 0.1527, 0.1513, 0.2032, 0.1412, 0.1775, 0.1245, 0.1417, 0.1007], "best": false, "unfused": false}, {"name": "S4-N0-r2s", "fam": "amort", "tput": [0.084, 0.1598, 0.2304, 0.2896, 0.3992, 0.4755, 0.6043, 0.659, 0.717, 0.7202, 0.7082, 0.6794, 0.6371, 0.5671, 0.4884, 0.4035, 0.3338, 0.2563, 0.2043], "best": false, "unfused": false}, {"name": "S4-N0-r2f", "fam": "amort", "tput": [0.0841, 0.16, 0.2307, 0.2902, 0.4004, 0.4771, 0.607, 0.6622, 0.7208, 0.724, 0.7119, 0.6828, 0.6401, 0.5694, 0.4902, 0.4047, 0.3346, 0.2568, 0.2046], "best": false, "unfused": false}, {"name": "S4-N4-r2s", "fam": "amort", "tput": [0.0843, 0.1608, 0.2324, 0.2929, 0.4055, 0.4845, 0.6189, 0.6764, 0.7377, 0.7357, 0.7232, 0.6932, 0.6492, 0.5767, 0.4955, 0.4084, 0.3372, 0.2583, 0.2056], "best": false, "unfused": false}, {"name": "S4-N4-r2f", "fam": "amort", "tput": [0.0843, 0.161, 0.2328, 0.2936, 0.4067, 0.4862, 0.6217, 0.6798, 0.7418, 0.7397, 0.7271, 0.6968, 0.6523, 0.5791, 0.4973, 0.4096, 0.338, 0.2588, 0.2059], "best": false, "unfused": false}, {"name": "S4-N5-r2s", "fam": "amort", "tput": [0.0842, 0.1603, 0.2314, 0.2913, 0.4023, 0.4799, 0.6115, 0.6676, 0.7272, 0.7305, 0.7223, 0.6932, 0.6492, 0.5767, 0.4955, 0.4083, 0.3371, 0.2583, 0.2056], "best": false, "unfused": false}, {"name": "S4-N5-r2f", "fam": "amort", "tput": [0.0842, 0.1605, 0.2318, 0.2919, 0.4035, 0.4816, 0.6143, 0.6709, 0.7312, 0.7344, 0.7261, 0.6968, 0.6523, 0.5791, 0.4973, 0.4096, 0.3379, 0.2588, 0.2059], "best": false, "unfused": false}, {"name": "S4-N6-r2s", "fam": "f6", "tput": [0.0844, 0.1613, 0.2335, 0.161, 0.2312, 0.1595, 0.2266, 0.1565, 0.1894, 0.2042, 0.218, 0.1533, 0.151, 0.2025, 0.1409, 0.1769, 0.1242, 0.1413, 0.1005], "best": false, "unfused": false}, {"name": "S4-N6-r2f", "fam": "f6", "tput": [0.0845, 0.1615, 0.2339, 0.1612, 0.2316, 0.1597, 0.227, 0.1567, 0.1897, 0.2045, 0.2184, 0.1534, 0.1512, 0.2028, 0.141, 0.1771, 0.1244, 0.1415, 0.1006], "best": false, "unfused": false}, {"name": "S5-N0-r2s", "fam": "amort", "tput": [0.0841, 0.16, 0.2309, 0.2902, 0.4009, 0.4771, 0.6083, 0.6622, 0.7228, 0.7259, 0.7138, 0.6655, 0.6401, 0.5706, 0.4902, 0.4053, 0.3346, 0.2571, 0.2046], "best": false, "unfused": false}, {"name": "S5-N0-r2f", "fam": "amort", "tput": [0.0841, 0.1602, 0.2313, 0.2909, 0.4021, 0.4788, 0.611, 0.6654, 0.7266, 0.7298, 0.7175, 0.6688, 0.6431, 0.573, 0.4919, 0.4065, 0.3355, 0.2576, 0.2049], "best": false, "unfused": false}, {"name": "S5-N4-r2s", "fam": "amort", "tput": [0.0843, 0.161, 0.233, 0.2936, 0.4073, 0.4862, 0.6231, 0.6798, 0.7438, 0.7417, 0.729, 0.6788, 0.6523, 0.5803, 0.4973, 0.4103, 0.338, 0.259, 0.2059], "best": false, "unfused": false}, {"name": "S5-N4-r2f", "fam": "amort", "tput": [0.0844, 0.1612, 0.2334, 0.2942, 0.4086, 0.4879, 0.626, 0.6832, 0.7479, 0.7458, 0.7329, 0.6822, 0.6555, 0.5828, 0.4991, 0.4115, 0.3388, 0.2595, 0.2062], "best": false, "unfused": false}, {"name": "S5-N5-r2s", "fam": "amort", "tput": [0.0842, 0.1605, 0.232, 0.2919, 0.4041, 0.4816, 0.6156, 0.6709, 0.7331, 0.7364, 0.728, 0.6788, 0.6523, 0.5803, 0.4973, 0.4102, 0.3379, 0.259, 0.2059], "best": false, "unfused": false}, {"name": "S5-N5-r2f", "fam": "amort", "tput": [0.0843, 0.1607, 0.2324, 0.2925, 0.4053, 0.4833, 0.6184, 0.6742, 0.7371, 0.7404, 0.7319, 0.6822, 0.6555, 0.5828, 0.4991, 0.4114, 0.3388, 0.2595, 0.2062], "best": false, "unfused": false}, {"name": "S5-N6-r2s", "fam": "f6", "tput": [0.0845, 0.1615, 0.2341, 0.1612, 0.2318, 0.1597, 0.2272, 0.1567, 0.1898, 0.2046, 0.2185, 0.1525, 0.1512, 0.2029, 0.141, 0.1773, 0.1244, 0.1415, 0.1006], "best": false, "unfused": false}, {"name": "S5-N6-r2f", "fam": "f6", "tput": [0.0845, 0.1617, 0.2345, 0.1614, 0.2322, 0.1599, 0.2275, 0.1569, 0.1901, 0.2049, 0.2189, 0.1527, 0.1513, 0.2032, 0.1412, 0.1775, 0.1245, 0.1417, 0.1007], "best": false, "unfused": false}]};
+const BEST = "S3-N4-r2f";
+const svg = document.getElementById('chart'), tip = document.getElementById('tip');
+const W = 900, H = 430, ml = 58, mr = 84, mt = 18, mb = 46;
+const bx = DATA.batches, x0 = Math.log2(bx[0]), x1 = Math.log2(bx[bx.length-1]);
+const ymax = 0.793;
+const X = b => ml + (Math.log2(b) - x0) / (x1 - x0) * (W - ml - mr);
+const Y = v => mt + (1 - v / ymax) * (H - mt - mb);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
+for (let v = 0; v <= ymax-0.05; v += 0.2) {
+  svg.appendChild(el('line', {x1: ml, x2: W-mr, y1: Y(v), y2: Y(v), stroke: 'var(--grid)', 'stroke-width': 1}));
+  const t = el('text', {x: ml-8, y: Y(v)+3.5, class: 'tick', 'text-anchor': 'end'}); t.textContent = v.toFixed(1); svg.appendChild(t);
+}
+[512,2048,8192,32768,131072].forEach(b => {
+  const t = el('text', {x: X(b), y: H-mb+18, class: 'tick', 'text-anchor': 'middle'}); t.textContent = b>=1024?(b/1024+'k'):b; svg.appendChild(t);
+});
+let ax = el('text', {x: ml, y: H-6, class: 'axtitle'}); ax.textContent = 'sequence length (prefill tokens, log)'; svg.appendChild(ax);
+let ay = el('text', {class: 'axtitle', transform: `translate(15,${mt+8}) rotate(-90)`, 'text-anchor': 'end'}); ay.textContent = 'throughput  (Mtok/s)'; svg.appendChild(ay);
+
+const path = c => 'M' + c.tput.map((v,i) => X(bx[i]) + ',' + Y(v)).join(' L');
+const draw = (filter, attrs) => DATA.configs.filter(filter).forEach(c => svg.appendChild(el('path', {d: path(c), fill: 'none', ...attrs})));
+draw(c => c.fam==='amort' && !c.best, {stroke: 'var(--amort-soft)', 'stroke-width': 1.2});
+draw(c => c.fam==='f6', {stroke: 'var(--f6-soft)', 'stroke-width': 1.2});
+DATA.configs.filter(c => c.unfused).forEach(c => svg.appendChild(el('path', {d: path(c), fill: 'none', stroke: 'var(--faint)', 'stroke-width': 1.6, 'stroke-dasharray': '5 4'})));
+const best = DATA.configs.find(c => c.best);
+svg.appendChild(el('path', {d: path(best), fill: 'none', stroke: 'var(--best)', 'stroke-width': 2.8, 'stroke-linejoin': 'round'}));
+const pi = best.tput.indexOf(Math.max(...best.tput));
+svg.appendChild(el('circle', {cx: X(bx[pi]), cy: Y(best.tput[pi]), r: 4.5, fill: 'var(--best)', stroke: 'var(--panel)', 'stroke-width': 2}));
+let lb = el('text', {x: X(bx[pi]), y: Y(best.tput[pi])-10, class: 'tick', fill: 'var(--best)', 'font-weight': 700, 'text-anchor': 'middle'});
+lb.textContent = 'peak ' + best.tput[pi].toFixed(3); svg.appendChild(lb);
+
+const cross = el('line', {y1: mt, y2: H-mb, stroke: 'var(--ink)', 'stroke-width': 1, opacity: 0}); svg.appendChild(cross);
+svg.addEventListener('pointermove', ev => {
+  const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) / r.width * W;
+  let bi = 0, bd = 1e9; bx.forEach((b,i) => { const dd = Math.abs(X(b)-px); if (dd<bd) { bd=dd; bi=i; } });
+  const B = bx[bi];
+  cross.setAttribute('x1', X(B)); cross.setAttribute('x2', X(B)); cross.setAttribute('opacity', .5);
+  const am = DATA.configs.filter(c=>c.fam==='amort').map(c=>c.tput[bi]);
+  const f6 = DATA.configs.filter(c=>c.fam==='f6').map(c=>c.tput[bi]).filter(v=>v>0);
+  const uf = DATA.configs.find(c=>c.unfused).tput[bi];
+  tip.innerHTML = `<div class="b">${B.toLocaleString()} tokens · ${(B*8/256)|0} tok/expert</div>`+
+    `<div class="row"><span><span class="dot" style="background:var(--best)"></span>best</span><b>${best.tput[bi].toFixed(3)}</b></div>`+
+    `<div class="row"><span>vs unfused</span><b>+${((best.tput[bi]/uf-1)*100).toFixed(1)}%</b></div>`+
+    `<div class="row"><span><span class="dot" style="background:var(--f6)"></span>on-chip F6</span><b>${f6.length?Math.max(...f6).toFixed(3):'—'}</b></div>`;
+  const left = Math.min(X(B)/W*r.width+14, r.width-186); tip.style.left = left + 'px'; tip.style.top = '6px'; tip.style.opacity = 1;
+});
+svg.addEventListener('pointerleave', () => { tip.style.opacity = 0; cross.setAttribute('opacity', 0); });
+
+const ranked = DATA.configs.map(c => ({name: c.name, fam: c.fam, peak: Math.max(...c.tput), B: bx[c.tput.indexOf(Math.max(...c.tput))]})).sort((a,b)=>b.peak-a.peak);
+const tb = document.querySelector('#rank tbody');
+[...ranked.slice(0,5), null, ...ranked.slice(-2)].forEach(r => {
+  const tr = document.createElement('tr');
+  if (!r) { tr.innerHTML = `<td colspan="3" style="text-align:center;color:var(--faint)">⋯ 33 more ⋯</td>`; tb.appendChild(tr); return; }
+  const col = r.fam==='f6'?'var(--f6)':(r.name===BEST?'var(--best)':'var(--amort)');
+  tr.innerHTML = `<td class="name"><span class="dot" style="background:${col}"></span>${r.name}</td><td>${r.peak.toFixed(3)}</td><td>${r.B.toLocaleString()}</td>`;
+  tb.appendChild(tr);
+});
+</script>
