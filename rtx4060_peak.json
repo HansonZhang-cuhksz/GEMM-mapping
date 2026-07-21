@@ -1,0 +1,227 @@
+{
+ "task": "T2-peak (peak-spec validation of rtx4060-measured profile)",
+ "smoke": false,
+ "conventions": {
+  "time_fields": "all *_ms fields are MILLISECONDS (med_time returns seconds; *1e3)",
+  "tflops": "2 * n^3 / time_s / 1e12 for a square n GEMM (bf16)",
+  "gbs": "bytes / time_s / 1e9; copy counts read+write (2x), sum counts read only",
+  "gain_convention": "gains/speedups = unfused_time/fused_time (>1.0 => fusion faster); not used in this T2 script but documented for the study",
+  "clocks": "unlocked on this WSL2 box; per-group nvidia-smi ClockSampler summaries recorded"
+ },
+ "versions": {
+  "torch": "2.11.0+cu130",
+  "cuda": "13.0",
+  "python": "3.13.12",
+  "device_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "triton": "3.6.0"
+ },
+ "device": {
+  "name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "compute_capability": "8.9",
+  "sm_count": 24,
+  "l2_cache_bytes": 33554432,
+  "smem_per_block_optin_bytes": 101376,
+  "smem_per_sm_bytes": 102400,
+  "total_memory_bytes": 8585216000,
+  "total_memory_gib": 7.99560546875
+ },
+ "clocks_locked": false,
+ "peak_gemm": {
+  "shapes": [
+   {
+    "n": 2048,
+    "time_ms": 1.0332159996032715,
+    "tflops": 16.627567895383567,
+    "clocks": {
+     "gr_mhz": {
+      "median": 210.0,
+      "min": 210.0,
+      "max": 210.0
+     },
+     "mem_mhz": {
+      "median": 810.0,
+      "min": 810.0,
+      "max": 810.0
+     },
+     "temp_c": {
+      "median": 60.0,
+      "min": 60.0,
+      "max": 60.0
+     },
+     "power_w": {
+      "median": 8.89,
+      "min": 8.89,
+      "max": 8.89
+     },
+     "n_samples": 1
+    }
+   },
+   {
+    "n": 4096,
+    "time_ms": 7.727616071701049,
+    "tflops": 17.785427251660305,
+    "clocks": {
+     "gr_mhz": {
+      "median": 1455.0,
+      "min": 1440.0,
+      "max": 1470.0
+     },
+     "mem_mhz": {
+      "median": 7501.0,
+      "min": 7001.0,
+      "max": 8001.0
+     },
+     "temp_c": {
+      "median": 63.0,
+      "min": 61.0,
+      "max": 65.0
+     },
+     "power_w": {
+      "median": 16.25,
+      "min": 11.79,
+      "max": 20.71
+     },
+     "n_samples": 2
+    }
+   },
+   {
+    "n": 6144,
+    "time_ms": 26.182144165039062,
+    "tflops": 17.71651951207977,
+    "clocks": {
+     "gr_mhz": {
+      "median": 1815.0,
+      "min": 1395.0,
+      "max": 2070.0
+     },
+     "mem_mhz": {
+      "median": 8001.0,
+      "min": 7001.0,
+      "max": 8001.0
+     },
+     "temp_c": {
+      "median": 65.0,
+      "min": 62.0,
+      "max": 66.0
+     },
+     "power_w": {
+      "median": 35.43,
+      "min": 12.06,
+      "max": 35.95
+     },
+     "n_samples": 3
+    }
+   },
+   {
+    "n": 8192,
+    "time_ms": 58.514944076538086,
+    "tflops": 18.790270504878695,
+    "clocks": {
+     "gr_mhz": {
+      "median": 1515.0,
+      "min": 435.0,
+      "max": 1575.0
+     },
+     "mem_mhz": {
+      "median": 5501.0,
+      "min": 5501.0,
+      "max": 7001.0
+     },
+     "temp_c": {
+      "median": 67.0,
+      "min": 63.0,
+      "max": 68.0
+     },
+     "power_w": {
+      "median": 35.370000000000005,
+      "min": 12.44,
+      "max": 35.9
+     },
+     "n_samples": 6
+    }
+   }
+  ],
+  "measured_peak_tflops": 18.790270504878695
+ },
+ "hbm_bandwidth": {
+  "tensor_bytes": 1610612736,
+  "tensor_numel": 805306368,
+  "d2d_copy": {
+   "time_ms": 14.993407726287842,
+   "bytes": 3221225472,
+   "gbs": 214.84278496290383,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1260.0,
+     "min": 210.0,
+     "max": 1470.0
+    },
+    "mem_mhz": {
+     "median": 7001.0,
+     "min": 810.0,
+     "max": 8001.0
+    },
+    "temp_c": {
+     "median": 65.0,
+     "min": 63.0,
+     "max": 65.0
+    },
+    "power_w": {
+     "median": 35.37,
+     "min": 10.69,
+     "max": 36.41
+    },
+    "n_samples": 3
+   }
+  },
+  "read_sum": {
+   "time_ms": 9.685440063476562,
+   "bytes": 1610612736,
+   "gbs": 166.2921586881283,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1237.5,
+     "min": 480.0,
+     "max": 1995.0
+    },
+    "mem_mhz": {
+     "median": 6251.0,
+     "min": 5501.0,
+     "max": 7001.0
+    },
+    "temp_c": {
+     "median": 64.5,
+     "min": 64.0,
+     "max": 65.0
+    },
+    "power_w": {
+     "median": 20.53,
+     "min": 13.96,
+     "max": 27.1
+    },
+    "n_samples": 2
+   }
+  },
+  "measured_bw_gbs": 214.84278496290383
+ },
+ "comparison": {
+  "profile_name": "RTX 4060 Laptop (locked 1500/5501, measured)",
+  "profile_peak_tflops": 18.432,
+  "profile_bw_gbs": 170.0,
+  "measured_peak_tflops": 18.790270504878695,
+  "measured_bw_gbs": 214.84278496290383,
+  "tflops_ratio_measured_over_profile": 1.019437418884478,
+  "bw_ratio_measured_over_profile": 1.2637810880170814,
+  "tensor_cores": 96,
+  "flops_per_core_per_clock": 128.0,
+  "profile_tensor_clock_mhz": 1500.0,
+  "implied_tensor_clock_mhz": 1529.1561283267167,
+  "implied_over_profile_clock": 1.019437418884478
+ },
+ "adjusted_profile": {
+  "clock_hz": 1529156128.3267167,
+  "bw_bytes_per_s": 214842784962.90384,
+  "check_peak_tflops": 18.790270504878695,
+  "check_bw_gbs": 214.84278496290383
+ }
+}
