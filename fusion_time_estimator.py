@@ -243,6 +243,37 @@ def estimate_ffn_fused(label, count, gpu: GpuModel) -> KTime:
     return KTime(label, t, ce, me, bott, traffic, ops, tiles, det)
 
 
+def estimate_ffn_fused_m(m, count, gpu: GpuModel):
+    """tpe-parametrized F6 (RTX4060_SIM_REAL_TASK.md T6.D.5 -- HARD prerequisite).
+
+    Same model as estimate_ffn_fused but with the per-expert row count `m` as an ARGUMENT
+    instead of the TOKENS_PER_EXPERT=64 module global, so the swept tpe drives the mt
+    weight-re-read factor (the F6 crossover) instead of being silently pinned at m=64.
+
+    Returns (time_s, m0, mt) for the best SMEM-feasible row-block, or None if no
+    m0 >= MMA_MIN_BM fits SMEM (full-FFN fusion infeasible on this GPU).
+    """
+    w_ug = HIDDEN * (2 * INTERMEDIATE) * BPE
+    w_dn = INTERMEDIATE * HIDDEN * BPE
+    x_out = 2 * m * HIDDEN * BPE
+    ops = (2 * m * (2 * INTERMEDIATE) * HIDDEN) + (2 * m * HIDDEN * INTERMEDIATE)
+    STREAM = 16 * 1024
+    best = None
+    for m0 in divisors(m):
+        if m0 < MMA_MIN_BM:
+            continue                                     # reproduces the m0=16 MMA floor
+        mt = m // m0
+        resident = m0 * INTERMEDIATE * BPE + m0 * 128 * BPE + STREAM
+        if resident > gpu.smem_per_block_bytes:
+            continue                                     # SMEM cap (m0=16 is the largest fit)
+        traffic = count * (x_out + mt * (w_ug + w_dn))   # weights re-read mt x  <- crossover driver
+        tiles = count * mt * max(1, HIDDEN // 128)
+        t = _roofline(gpu, count * ops, traffic, tiles, resident, 2)[0]
+        if best is None or t < best[0]:
+            best = (t, m0, mt)
+    return best                                          # None => infeasible
+
+
 # --------------------------------------------------------------------------- #
 # The six fusions: (fused kernels) vs (unfused kernels)                          #
 # --------------------------------------------------------------------------- #

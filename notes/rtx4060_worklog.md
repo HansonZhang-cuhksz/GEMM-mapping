@@ -1,5 +1,111 @@
 # RTX 4060 sim–real fusion gap — worklog
 
+# ROUND 3 — T6 (RMSNorm + MoE-structure fusions A–E), LOCKED CLOCKS (2026-07-22)
+
+Task file grew +48 KB with §T6 (tests A–E) — read in full. Host confirms clocks still locked
+1500/5501. Host decisions (asked, not assumed): (1) A-epilogue prefill capped at tokens ≤ 32768
+(131072 omitted, documented); (2) A-epilogue input INCLUDES a pre-materialized residual
+(layer-faithful variant: RMSNorm(mla_o_out + res); the reduction remains the crux, residual-add
+is tile-local per F1); (3) run all five tests sequentially in one go (~4–8 h GPU).
+
+Plan: author `rtx4060_rmsnorm_fuse.py` (A), `rtx4060_router_prologue.py` (B), and extend
+`rtx4060_fusion_measure.py` + `fusion_time_estimator.py` (C: router top-k attempt-and-drop;
+D: FFN L1/L2/L3-F6 levels + `estimate_ffn_fused_m` tpe-parametrized estimator (HARD prereq,
+acceptance-checked); E: expert-merge+residual2) via parallel author agents + adversarial
+verifiers (round-1 pattern), then run full sweeps serially A→B→C→D→E at the lock, then append
+five sub-sections to `rtx4060_sim_real_results.md` + audit. New-test rows for C/D/E MERGE into
+the existing locked `rtx4060_fusion.json` (extend, not overwrite; T4 rows + annotations kept).
+
+## R3 prep (2026-07-22)
+
+- Prep workflow hit the session usage limit mid-flight: B author finished (smoke-passed);
+  A author + CDE author + B verifier died. Finished the rest inline:
+  - **CDE extensions** (agent-partial, completed by me): all C/D/E functions + flags + merge-append
+    landed and compile; `estimate_ffn_fused_m` in `fusion_time_estimator.py` passes ALL THREE
+    D.5 acceptance checks (0.2591≈0.259 at m=64; mt-scaling 32×; m0 capped 16 by SMEM) and
+    reproduces the D.5 predicted table. Fixes applied by me: (1) merge fusion judge missed the
+    `triton_per_*` (persistent-reduction) kernel-name prefix — observed
+    `triton_per_fused_add_mul_sum_unsqueeze_0` as THE single fused kernel → false negative,
+    fixed; (2) added `measured_gain_verified_stock` (compiled/nocg only, no hand kernel/baddbmm)
+    as E's out-of-the-box headline metric; (3) enriched the F6 infeasible evidence (below).
+  - **F6 (D.4) attempt outcome — documented infeasible in Triton**: 4-chunk kernel (CH=512)
+    OutOfResources at every candidate (Required 176–322 KiB vs 101376 B — tl.dot stages every
+    operand in SMEM; the paper 84 KiB budget is unreachable without explicit buffer reuse);
+    my 8-chunk variant (CH=256, BK=32, s=1) COMPILES within SMEM but returns corrupt results
+    (rel 57–252 config-dependent) while the identical phase-1 chunk in isolation is correct
+    (rel 0.011) — Triton codegen/SMEM-liveness failure with 8 persistent dot operands.
+    → estimator-only F6 per D.4 drop rules i/ii, evidence recorded in the JSON rows.
+    (A CUTLASS-class kernel with explicit SMEM management could still hit the budget.)
+  - **A script** (`rtx4060_rmsnorm_fuse.py`) authored by me: epilogue (residual-included per
+    host decision) with wide-tile attempt protocol + P2/P1 prologue hand kernels + spec-A.5
+    est helpers with the structure-blind guard. Smoke-passed end-to-end (epilogue stock
+    fusions 0/1 as expected; wide-tile runs at smoke dims where it fits SMEM — will record
+    OutOfResources at full dims).
+  - B self-reviewed (est formulas verbatim, no-split-K, untimed Wp fold, 131072→65536 OOM
+    fallback); its verifier died on the session limit — compensated by the author's smoke
+    evidence + my targeted review.
+
+## R3-T6 — full runs complete (2026-07-22, locked clocks verified 1500/5501 before launch)
+
+Chain A→B→C→D→E ran 14:57–15:46 (49 min — warm inductor caches made compiles nearly free).
+All exit 0; only `merge_prefill_T49152` errored (OOM at end-of-sweep; then an int32
+pointer-overflow in the hand merge kernel at flat index 2.42e9 > 2^31 — kernel fixed to int64
+row offsets, row re-measured in a fresh process). Row counts: A 17/17, B 16/16, fusion.json
++9 topk +9 ffn +2 grouped +9 merge (old T4 rows + annotations preserved by merge-append).
+
+Headlines (details in the results file):
+- **A epilogue**: 0/7 stock fusions; wide-tile OutOfResources 7/7 (384 KiB fp32 stage vs
+  99 KiB); measured gains ≈1.00 — structurally infeasible, exactly as predicted; the
+  structure-blind est cell (1.033) stands as the flagged mismatch datapoint.
+- **A prologue**: hand P2/P1 numerics-OK everywhere; wins ONLY on the skinny router host
+  (+17…+27% vs honest-P2 est +27…+30%); loses on up_gate (0.74–1.01 vs est +0.4–2.6%) — the
+  hand GEMM cannot match cuBLAS on wide shapes, eating the small prologue saving.
+- **B router prologue**: the study's largest verified gains. b2 clean geomean **1.844**
+  (M≥2048, up to 2.17×) vs est 2.230; b1 **1.478** (M≥2048, excl the 131072 row whose 9.79×
+  reflects a memory-pressure-degraded baseline: eager 294 ms vs GEMM-only 23.7 ms) vs est
+  3.04. Inductor forced-template folded the input add 0/16 — hand kernel is the only fused
+  path. Spec caveats apply (router is a minor cost center; shared h/x shrink attribution).
+- **C router top-k**: formal **DROP** per C.6 — `router_topk_drop_evaluation`: no stock path
+  fused 9/9 (separate topk kernel survives, recorded), custom BN=256 kernel gain ≤1.0 on all
+  6 drift-clean configs (0.58–1.00). The est traffic-only bound (~1.03) did not materialize.
+- **D FFN levels**: F6/L3 estimator-only (Triton-infeasible, evidence in rows; est cliff
+  r_L3 1.005 at mt=1 → 0.15 at mt≥16 stands as prediction). Measured **L2 at real GLM
+  per-expert dims is neutral-to-negative** (r_up_swiglu 0.74–1.10, only tpe=64 at +10%;
+  r_L2 0.80–1.07) — refines T4: SwiGLU fusion pays on dense mid-size shapes, not in the
+  skinny-tpe per-expert regime. Grouped cross-check timings fine (grouped ≤ 8× single,
+  0.80–0.97×); grouped rows' fp32-reference numerics field is buggy (rel ~800–1000,
+  reference-construction bug — flagged, timings unaffected).
+- **E merge+residual2**: the cleanest confirmation — verified gains **1.20–1.28 at every
+  token count vs est exactly 12/10 = 1.20** (profile- and token-independent); stock
+  `torch.compile` fuses it 8/8 (single `triton_per_fused_*` kernel; judge fixed for that
+  prefix); stock-only gains 1.13–1.28. Flatness 512→32768 = 1.2497/1.2423/1.2318;
+  49152 point re-measured after the int64 fix (token-independence block updated after).
+
+## R3 close-out (2026-07-22)
+
+- `merge_prefill_T49152` recovered after two failures (end-of-sweep OOM; then an **int32
+  pointer-arithmetic overflow in the hand merge kernel** — flat index 49152·8·6144 = 2.42e9 >
+  2³¹, fixed to int64 row offsets): verified gain 1.2298 (stock path, fused). Its eager paths
+  paged into host memory (12.4 s, WSL2 oversubscription) — gain computed against the clean
+  device-resident baseline. **Token-independence CONFIRMED**: 1.2497/1.2423/1.2318/1.2298 at
+  512/8192/32768/49152, spread 1.6% ≤ 5% → the infeasible 131072 point is defensibly covered
+  (`merge_token_independence` block updated in the JSON).
+- Appended the five T6 sub-sections + T6 verdict to `rtx4060_sim_real_results.md`. Independent
+  number audit (agent, python re-derivation over all three JSONs + a live estimator re-run for
+  the honest-P2 figures): all headline geomeans/tables confirmed; 8 corrections applied —
+  notably: the A wide-tile failure is a Triton `CompilationError` (tl.arange needs a power-of-2
+  width; N=6144 inexpressible; 512 KiB padded stage rules it out a fortiori), NOT the
+  OutOfResources I had assumed; P1 numerics 9/10 (tpe=1024 misses tol); A up_gate clean geomean
+  0.87 (n=5); C clean-subset range 0.75–1.00 (0.58 was the tainted M512 row); C recorded est
+  cells +1.3…+1.9% (3.5% was the spec ceiling); D tpe=64 isolated est +2.0%; E baddbmm never
+  the fastest fused path; T6-verdict stock-compile merge range +13…+28%.
+- **T6 deliverables complete**: `rtx4060_rmsnorm_fuse.py` + `rtx4060_rmsnorm.json` (A),
+  `rtx4060_router_prologue.py` + `rtx4060_router_prologue.json` (B), extended
+  `rtx4060_fusion_measure.py` + `fusion_time_estimator.py::estimate_ffn_fused_m` with C/D/E
+  rows merged into `rtx4060_fusion.json` (+ `router_topk_drop_evaluation`,
+  `merge_token_independence` blocks), five sub-sections + T6 verdict in
+  `rtx4060_sim_real_results.md`, this worklog.
+
 # ROUND 2 — LOCKED-CLOCK RE-RUN (2026-07-22)
 
 The host locked the clocks to **1500 MHz core / 5501 MHz VRAM** (the exact calibration point of

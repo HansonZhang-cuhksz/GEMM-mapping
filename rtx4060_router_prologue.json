@@ -1,0 +1,3656 @@
+{
+ "conventions": {
+  "test": "T6.B router PROLOGUE fusion: b2 = residual-only (logits=(attn+res)@Wr), b1 = residual+RMSNorm (logits=RMSNorm(attn+res)@Wr, gamma folded into Wp=Wr*gamma[:,None] precomputed UNTIMED on host)",
+  "caveat_router_minor_cost_center": "ABSOLUTE-MAGNITUDE CAVEAT (spec B.1, stated prominently): the router is a MINOR cost center - n=EXPERTS=256 is tiny, its FLOPs 2*M*256*6144 are ~16x below one up_gate expert-layer and dwarfed by mla_o. A healthy RELATIVE prologue speedup here is a SMALL ABSOLUTE layer saving.",
+  "caveat_shared_h_x": "SHARED-TENSOR CAVEAT (spec T6.0.2c / B.1): in the real layer h = attn_out+residual_in and x = RMSNorm(h) are shared downstream, so the router-ATTRIBUTABLE saving is only the avoided re-read of x - SMALLER than this standalone microbenchmark shows, which charges the full residual+rmsnorm vector kernels to the router alone.",
+  "rmsnorm_baseline_traffic_note": "MODEL-LABELING NOTE (spec B.5): the b1 fused estimate decomposes as residual -> a_factor=2.0 (the RESIDUAL's second [M,HIDDEN] operand read; NOT F5's gate+up 2x-wide contraction and NOT the RMSNorm) + rmsnorm -> aux_smem m0*4 fp32 per-row partials ONLY (RMSNorm adds NO extra A-read: it is a free K-reduction over the already-resident A-tile), so the A-read is counted ONCE for the norm. The STANDALONE unfused rmsnorm baseline is modeled as 2*M*HIDDEN*BPE + M*4 traffic (read h, write normalized x, per-row stat) because a standalone kernel physically must write x - a DOCUMENTED DEVIATION from the estimator's RMSNORM_TRAFFIC constant (M*HIDDEN*BPE + M*4), which assumes the norm output is itself fused forward (the F3 assumption). For a pure-RMSNorm no-residual prologue variant use a_factor=1.0 + aux m0*4 (repo F3).",
+  "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+  "time_unit": "milliseconds for every field ending in _ms",
+  "med_time_returns": "SECONDS (rtx4060_common.med_time); converted to ms here (*1e3)",
+  "estimator_time_unit": "SECONDS (KTime.time_s); converted to ms here (*1e3)",
+  "dtype": "bfloat16 for all measured tensors; fp32 accumulate",
+  "gain_definition": "gain = unfused_time / fused_time (>1.0 => fusion FASTER)",
+  "measured_gain": "best_unfused_ms / best_fused_ms (C500-convention, T6.0.4; best fused over compiled/forced/triton INCLUDING unverified paths; best_unfused = min(eager, nocg) per spec B.2)",
+  "measured_gain_verified": "best_unfused_ms / best VERIFIED-fused path: hand triton (fused by construction, grid (cdiv(M,BM),1), no split-K) iff numerics_ok; forced/compiled iff judge_fused confirms the fold AND numerics_ok. The verdict keys on THIS",
+  "estimated_gain": "est_unfused_ms / est_fused_ms (B.5 helpers, rtx4060-measured profile; *_adj = --t2-json adjusted profile via build_adjusted_profile)",
+  "est_model_validity": "the B.5 est model is a faithful F3-analog (residual is tile-local; the RMSNorm reduction is K-local to one CTA's loop) - NOT structure-blind; no est=INVALID flag applies here (contrast T6.A epilogue and T6.C, per the T6.0.4 reporting guard)",
+  "numerics": "fp32 ground truth per config (row-chunked; never materializes fp32 [M,6144]); each path OK iff rel_max_vs_fp32 <= max(2*eager_rel_max, 5e-2). fp32-accumulated fused kernels are typically MORE accurate than eager, so allclose-vs-eager would be the wrong test",
+  "unfused_paths": "b2: eager residual + vendor GEMM (2 kernels); b1: eager residual + eager F.rms_norm + vendor GEMM (3 kernels); nocg (max-autotune-no-cudagraphs, unforced) is the BEST-UNFUSED realization on this 24-SM part (vendor GEMM + fused pointwise add [+ separate rms reduction]), NOT a fused candidate (spec B.3); best_unfused = min(eager, nocg)",
+  "forced_path": "is_big_gpu patched + TRITON-only autotune backends + no-cudagraphs: the key STOCK test for b2 - does inductor prologue-fusion fold the input add into a single triton_tem_fused_* template? Evidence recorded either way (forced_note). b1: even forced, inductor cannot co-accumulate sum_k h^2 inside the matmul template - at best folds the residual, leaves the RMSNorm as a separate reduction kernel",
+  "hand_kernel": "B.4 exactly: BN=256 full-N, grid (cdiv(M,BM), 1), BM {64,128}, BK {32,64}, warps 4-8, stages 2-3 mini-autotune; b2: acc += dot(a+r, W-tile); b1: dual-accumulator single pass co-accumulating fp32 sumsq over the SAME K-loop, rms applied at K-loop end, gamma pre-folded into Wp. HARD no-split-K: single-pass sumsq is only correct if one CTA owns the full K-loop for its rows (M/BM CTAs give the parallelism; fp32 numerics would catch any violation)",
+  "gemm_drift_ratio": "bare X@Wr GEMM re-measured at config END / at START (X=attn); clean iff |drift-1| <= 0.05; drift-tainted rows kept in JSON but excluded from the aggregate geomeans (T6.0.4)",
+  "excluded_from_aggregate": "spec B.7: rows with |drift-1| > 0.05 OR mutually-inconsistent baselines (best_unfused < 0.97*gemm_only - the unfused chain contains the bare GEMM, so this marks a latency/occupancy-bound small-M or drifting row) are flagged and excluded from geomeans",
+  "regime_boundary": "M=8192 sits in both the decode and prefill token lists (T6.0.3 boundary anchor); the router is dense (M=tokens) so it is measured ONCE and labeled 'decode/prefill-boundary'",
+  "oom_fallback": "spec B.7: prefill M=131072 b1 unfused holds attn,res,h,x (~6 GiB + workspaces); if a config OOMs at M=131072 it is re-run at M=65536 and documented in its oom_fallback field (the fused path uses fewer buffers)",
+  "compiled_cudagraph_input_copy_us": "GPU time of multi_tensor_apply static-input-copy kernels inside ONE compiled (cudagraphs) call - deployment overhead, not fusion work",
+  "timing": "median of 30 cuda-event samples, 15 warmup, per config (rtx4060_common.med_time with busy-GEMM clock warmer)"
+ },
+ "env": {
+  "torch_version": "2.11.0+cu130",
+  "cuda_version": "13.0",
+  "triton_version": "3.6.0",
+  "device_name": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "sm_count": 24,
+  "total_memory_gib": 7.9956,
+  "smem_per_block_optin_bytes": 101376,
+  "estimator_profile": "RTX 4060 Laptop (locked 1500/5501, measured)",
+  "estimator_peak_tflops": 18.432,
+  "estimator_bw_gbps": 170.0,
+  "clocks_locked": true,
+  "clocks_note": "clocks LOCKED 1500 MHz core / 5501 MHz VRAM by the host; the 35 W power cap can still throttle below the lock on sustained heavy configs - ClockSampler + drift probes record it",
+  "inductor_prologue_fusion_flag": true,
+  "smoke": false,
+  "adjusted_profile": {
+   "applied": {
+    "clock_hz": 1485373551.996981,
+    "bw_bytes_per_s": 167942342452.44226
+   },
+   "source": "t2 adjusted_profile block",
+   "check_peak_tflops": 18.252270206938903,
+   "check_bw_gbs": 167.94234245244226
+  }
+ },
+ "configs": [
+  {
+   "name": "router_b2_M512",
+   "kind": "router_prologue",
+   "variant": "b2",
+   "regime": "decode",
+   "dims": {
+    "M": 512,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 0.11827200278639792,
+   "unfused_ms": 0.16076800227165222,
+   "gemm_only_repeat_ms": 0.15462400019168854,
+   "gemm_drift_ratio": 1.3073592781796652,
+   "drift_clean": false,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": true,
+   "exclusion_reasons": [
+    "gemm_drift_ratio 1.3074 outside [0.95,1.05] (T6.0.4 drift rule)"
+   ],
+   "eager_rel_max_vs_fp32": 0.7869607210159302,
+   "rel_tol": 1.5739214420318604,
+   "eager_kernel_evidence": [
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 95.132,
+     "avg_us": 95.132
+    },
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 16.309,
+     "avg_us": 16.309
+    },
+    {
+     "name": "void cublasLt::splitKreduce_kernel<32, 16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, false, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)",
+     "count": 1,
+     "total_us": 5.341,
+     "avg_us": 5.341
+    }
+   ],
+   "unfused_compiled_nocg_ms": 0.23825599998235703,
+   "best_unfused_ms": 0.16076800227165222,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 0.3696639984846115,
+    "compiled_forced_triton_ms": 0.21800000220537186,
+    "triton_ms": 0.4164160043001175
+   },
+   "best_fused_ms": 0.21800000220537186,
+   "measured_gain": 0.737467892868171,
+   "measured_gain_verified": 0.386075464466981,
+   "est_unfused_ms": 0.2420976941176471,
+   "est_fused_ms": 0.13107200000000002,
+   "estimated_gain": 1.8470588235294116,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "stock/forced template did NOT fold the input add on this torch build; surviving separate kernels: ['triton_poi_fused_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 1,
+     "total_us": 141.349,
+     "avg_us": 141.349
+    },
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 95.866,
+     "avg_us": 95.866
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 23.302,
+     "avg_us": 23.302
+    },
+    {
+     "name": "void cublasLt::splitKreduce_kernel<32, 16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, false, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)",
+     "count": 1,
+     "total_us": 5.153,
+     "avg_us": 5.153
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.532,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 95.779,
+     "avg_us": 95.779
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 16.73,
+     "avg_us": 16.73
+    },
+    {
+     "name": "void cublasLt::splitKreduce_kernel<32, 16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, false, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)",
+     "count": 1,
+     "total_us": 5.374,
+     "avg_us": 5.374
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8::Params)",
+    "dominant_frac_of_gpu_time": 0.8125,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_tem_fused_add_mm_1",
+     "count": 1,
+     "total_us": 133.578,
+     "avg_us": 133.578
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 16.489,
+     "avg_us": 16.489
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_tem_fused_add_mm_1",
+    "dominant_frac_of_gpu_time": 0.8901,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.7869607210159302,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.7869607210159302,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.6267974376678467,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 3.1255410390930267,
+   "nocg_over_gemm_ratio": 2.0144750606164425,
+   "forced_over_gemm_ratio": 1.8432088496808927,
+   "triton_over_gemm_ratio": 3.520833286743058,
+   "compiled_cudagraph_input_copy_us": 141.349,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.6267974376678467,
+    "eager_rel_max_vs_fp32": 0.7869607210159302,
+    "rel_tol": 1.5739214420318604,
+    "max_abs_diff_vs_fp32": 1.4471435546875,
+    "config": "BM64 BN256 BK32 w4 s2 (tuned over 8 candidates)",
+    "grid": "(cdiv(512,64), 1) = (8, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_kernel",
+      "count": 1,
+      "total_us": 292.35,
+      "avg_us": 292.35
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 69.0,
+     "min": 68.0,
+     "max": 72.0
+    },
+    "power_w": {
+     "median": 13.95,
+     "min": 10.6,
+     "max": 25.45
+    },
+    "n_samples": 35
+   },
+   "small_m_latency_note": "M<=1024: few row-tiles on 24 SM (grid=cdiv(M,BM)) - latency/occupancy-bound regime; BM=64 preferred to raise tile count; see baselines_consistent + drift (spec B.7)",
+   "est_unfused_ms_adj": 0.2447486631572247,
+   "est_fused_ms_adj": 0.13236266374588013,
+   "estimated_gain_adj": 1.849076289572955
+  },
+  {
+   "name": "router_b2_M1024",
+   "kind": "router_prologue",
+   "variant": "b2",
+   "regime": "decode",
+   "dims": {
+    "M": 1024,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 0.23289600014686582,
+   "unfused_ms": 0.38996799290180206,
+   "gemm_only_repeat_ms": 0.2823040038347245,
+   "gemm_drift_ratio": 1.21214620971035,
+   "drift_clean": false,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": true,
+   "exclusion_reasons": [
+    "gemm_drift_ratio 1.2121 outside [0.95,1.05] (T6.0.4 drift rule)"
+   ],
+   "eager_rel_max_vs_fp32": 0.9679262042045593,
+   "rel_tol": 1.9358524084091187,
+   "eager_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 188.656,
+     "avg_us": 188.656
+    },
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 173.389,
+     "avg_us": 173.389
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 0.992,
+     "avg_us": 0.992
+    }
+   ],
+   "unfused_compiled_nocg_ms": 0.44516800343990326,
+   "best_unfused_ms": 0.38996799290180206,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 0.8256639838218689,
+    "compiled_forced_triton_ms": 0.45083199441432953,
+    "triton_ms": 0.38456000387668615
+   },
+   "best_fused_ms": 0.38456000387668615,
+   "measured_gain": 1.0140627963662339,
+   "measured_gain_verified": 1.0140627963662339,
+   "est_unfused_ms": 0.4186593882352941,
+   "est_fused_ms": 0.196608,
+   "estimated_gain": 2.1294117647058823,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "stock/forced template did NOT fold the input add on this torch build; surviving separate kernels: ['triton_poi_fused_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 1,
+     "total_us": 334.707,
+     "avg_us": 334.707
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 190.909,
+     "avg_us": 190.909
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 168.651,
+     "avg_us": 168.651
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 0.448,
+     "avg_us": 0.448
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4818,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 189.775,
+     "avg_us": 189.775
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 173.498,
+     "avg_us": 173.498
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.538,
+     "avg_us": 1.538
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+    "dominant_frac_of_gpu_time": 0.5202,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_tem_fused_add_mm_1",
+     "count": 1,
+     "total_us": 215.194,
+     "avg_us": 215.194
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 176.61,
+     "avg_us": 176.61
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_tem_fused_add_mm_1",
+    "dominant_frac_of_gpu_time": 0.5492,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.9679262042045593,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.9679262042045593,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.5478183627128601,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 3.545204654872559,
+   "nocg_over_gemm_ratio": 1.911445465612021,
+   "forced_over_gemm_ratio": 1.9357652949386497,
+   "triton_over_gemm_ratio": 1.6512091389898493,
+   "compiled_cudagraph_input_copy_us": 334.707,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.5478183627128601,
+    "eager_rel_max_vs_fp32": 0.9679262042045593,
+    "rel_tol": 1.9358524084091187,
+    "max_abs_diff_vs_fp32": 1.653778076171875,
+    "config": "BM64 BN256 BK32 w4 s2 (tuned over 8 candidates)",
+    "grid": "(cdiv(1024,64), 1) = (16, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_kernel",
+      "count": 1,
+      "total_us": 295.53,
+      "avg_us": 295.53
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 69.0,
+     "min": 68.0,
+     "max": 72.0
+    },
+    "power_w": {
+     "median": 16.35,
+     "min": 11.04,
+     "max": 28.11
+    },
+    "n_samples": 21
+   },
+   "small_m_latency_note": "M<=1024: few row-tiles on 24 SM (grid=cdiv(M,BM)) - latency/occupancy-bound regime; BM=64 preferred to raise tile count; see baselines_consistent + drift (spec B.7)",
+   "est_unfused_ms_adj": 0.42331599444150936,
+   "est_fused_ms_adj": 0.19854399561882022,
+   "estimated_gain_adj": 2.1321017194306062
+  },
+  {
+   "name": "router_b2_M2048",
+   "kind": "router_prologue",
+   "variant": "b2",
+   "regime": "decode",
+   "dims": {
+    "M": 2048,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 0.43755199015140533,
+   "unfused_ms": 0.860016018152237,
+   "gemm_only_repeat_ms": 0.4317120015621185,
+   "gemm_drift_ratio": 0.9866530407340484,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.8278247117996216,
+   "rel_tol": 1.6556494235992432,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 446.299,
+     "avg_us": 446.299
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 361.537,
+     "avg_us": 361.537
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.567,
+     "avg_us": 1.567
+    }
+   ],
+   "unfused_compiled_nocg_ms": 0.9281120002269745,
+   "best_unfused_ms": 0.860016018152237,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 1.7560480237007141,
+    "compiled_forced_triton_ms": 0.9762880206108093,
+    "triton_ms": 0.6767680048942566
+   },
+   "best_fused_ms": 0.6767680048942566,
+   "measured_gain": 1.2707693211451574,
+   "measured_gain_verified": 1.2707693211451574,
+   "est_unfused_ms": 0.8373187764705882,
+   "est_fused_ms": 0.393216,
+   "estimated_gain": 2.1294117647058823,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "stock/forced template did NOT fold the input add on this torch build; surviving separate kernels: ['triton_poi_fused_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 2,
+     "total_us": 659.834,
+     "avg_us": 329.917
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 528.257,
+     "avg_us": 528.257
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 363.235,
+     "avg_us": 363.235
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 0.448,
+     "avg_us": 0.448
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4252,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 465.772,
+     "avg_us": 465.772
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 362.068,
+     "avg_us": 362.068
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.569,
+     "avg_us": 1.569
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.5616,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 435.433,
+     "avg_us": 435.433
+    },
+    {
+     "name": "triton_tem_fused_add_mm_1",
+     "count": 1,
+     "total_us": 408.837,
+     "avg_us": 408.837
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.5158,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.8278247117996216,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.8278247117996216,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.6572416424751282,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 4.013347129544702,
+   "nocg_over_gemm_ratio": 2.121146791963674,
+   "forced_over_gemm_ratio": 2.231250325870958,
+   "triton_over_gemm_ratio": 1.5467144936538302,
+   "compiled_cudagraph_input_copy_us": 659.834,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.6572416424751282,
+    "eager_rel_max_vs_fp32": 0.8278247117996216,
+    "rel_tol": 1.6556494235992432,
+    "max_abs_diff_vs_fp32": 2.0487060546875,
+    "config": "BM64 BN256 BK32 w4 s2 (tuned over 8 candidates)",
+    "grid": "(cdiv(2048,64), 1) = (32, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_kernel",
+      "count": 1,
+      "total_us": 576.463,
+      "avg_us": 576.463
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 69.0,
+     "min": 68.0,
+     "max": 72.0
+    },
+    "power_w": {
+     "median": 15.96,
+     "min": 10.56,
+     "max": 27.89
+    },
+    "n_samples": 25
+   },
+   "est_unfused_ms_adj": 0.8466319888830187,
+   "est_fused_ms_adj": 0.39708799123764044,
+   "estimated_gain_adj": 2.1321017194306062
+  },
+  {
+   "name": "router_b2_M4096",
+   "kind": "router_prologue",
+   "variant": "b2",
+   "regime": "decode",
+   "dims": {
+    "M": 4096,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 0.7815839946269989,
+   "unfused_ms": 1.6594719886779785,
+   "gemm_only_repeat_ms": 0.7813119888305664,
+   "gemm_drift_ratio": 0.9996519813631006,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.7538216710090637,
+   "rel_tol": 1.5076433420181274,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 838.403,
+     "avg_us": 838.403
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 720.711,
+     "avg_us": 720.711
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.699,
+     "avg_us": 1.699
+    }
+   ],
+   "unfused_compiled_nocg_ms": 1.7673119902610779,
+   "best_unfused_ms": 1.6594719886779785,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 3.21233594417572,
+    "compiled_forced_triton_ms": 1.715824007987976,
+    "triton_ms": 0.9515199959278108
+   },
+   "best_fused_ms": 0.9515199959278108,
+   "measured_gain": 1.744022191630199,
+   "measured_gain_verified": 1.744022191630199,
+   "est_unfused_ms": 1.6091015529411763,
+   "est_fused_ms": 0.720896,
+   "estimated_gain": 2.232085561497326,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "stock/forced template did NOT fold the input add on this torch build; surviving separate kernels: ['triton_poi_fused_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 3,
+     "total_us": 1341.921,
+     "avg_us": 447.307
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 938.859,
+     "avg_us": 938.859
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 717.314,
+     "avg_us": 717.314
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.087,
+     "avg_us": 1.087
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4474,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 910.276,
+     "avg_us": 910.276
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 717.429,
+     "avg_us": 717.429
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 0.994,
+     "avg_us": 0.994
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.5589,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 809.713,
+     "avg_us": 809.713
+    },
+    {
+     "name": "triton_tem_fused_add_mm_1",
+     "count": 1,
+     "total_us": 763.509,
+     "avg_us": 763.509
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.5147,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.7538216710090637,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.7538216710090637,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.5721379518508911,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 4.110032915539381,
+   "nocg_over_gemm_ratio": 2.2611926580002515,
+   "forced_over_gemm_ratio": 2.1953162037393454,
+   "triton_over_gemm_ratio": 1.2174251295689744,
+   "compiled_cudagraph_input_copy_us": 1341.921,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.5721379518508911,
+    "eager_rel_max_vs_fp32": 0.7538216710090637,
+    "rel_tol": 1.5076433420181274,
+    "max_abs_diff_vs_fp32": 1.6038818359375,
+    "config": "BM64 BN256 BK32 w4 s2 (tuned over 8 candidates)",
+    "grid": "(cdiv(4096,64), 1) = (64, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_kernel",
+      "count": 1,
+      "total_us": 864.138,
+      "avg_us": 864.138
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 69.0,
+     "min": 68.0,
+     "max": 72.0
+    },
+    "power_w": {
+     "median": 16.82,
+     "min": 10.66,
+     "max": 28.19
+    },
+    "n_samples": 25
+   },
+   "est_unfused_ms_adj": 1.627082645893097,
+   "est_fused_ms_adj": 0.7279946506023407,
+   "estimated_gain_adj": 2.235020057560661
+  },
+  {
+   "name": "router_b2_M8192",
+   "kind": "router_prologue",
+   "variant": "b2",
+   "regime": "decode/prefill-boundary",
+   "dims": {
+    "M": 8192,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 1.5130239725112915,
+   "unfused_ms": 3.4028799533843994,
+   "gemm_only_repeat_ms": 1.5132480263710022,
+   "gemm_drift_ratio": 1.0001480834829992,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.7685287594795227,
+   "rel_tol": 1.5370575189590454,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 1948.152,
+     "avg_us": 1948.152
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 1467.046,
+     "avg_us": 1467.046
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.216,
+     "avg_us": 1.216
+    }
+   ],
+   "unfused_compiled_nocg_ms": 3.432783961296082,
+   "best_unfused_ms": 3.4028799533843994,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 6.31279993057251,
+    "compiled_forced_triton_ms": 3.4790080785751347,
+    "triton_ms": 1.7862879633903503
+   },
+   "best_fused_ms": 1.7862879633903503,
+   "measured_gain": 1.9050007743016861,
+   "measured_gain_verified": 1.9050007743016861,
+   "est_unfused_ms": 3.2182031058823526,
+   "est_fused_ms": 1.441792,
+   "estimated_gain": 2.232085561497326,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "stock/forced template did NOT fold the input add on this torch build; surviving separate kernels: ['triton_poi_fused_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 5,
+     "total_us": 2649.155,
+     "avg_us": 529.831
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 2055.814,
+     "avg_us": 2055.814
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 1468.174,
+     "avg_us": 1468.174
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.12,
+     "avg_us": 1.12
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4291,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 1778.467,
+     "avg_us": 1778.467
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 1466.786,
+     "avg_us": 1466.786
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.152,
+     "avg_us": 1.152
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.5478,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 1879.05,
+     "avg_us": 1879.05
+    },
+    {
+     "name": "triton_tem_fused_add_mm_1",
+     "count": 1,
+     "total_us": 1468.069,
+     "avg_us": 1468.069
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.5614,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.7685287594795227,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.7685287594795227,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.6648910641670227,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 4.172306615931955,
+   "nocg_over_gemm_ratio": 2.2688232464674076,
+   "forced_over_gemm_ratio": 2.299374062659917,
+   "triton_over_gemm_ratio": 1.180607839560863,
+   "compiled_cudagraph_input_copy_us": 2649.155,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.6648910641670227,
+    "eager_rel_max_vs_fp32": 0.7685287594795227,
+    "rel_tol": 1.5370575189590454,
+    "max_abs_diff_vs_fp32": 1.9447021484375,
+    "config": "BM64 BN256 BK32 w4 s2 (tuned over 8 candidates)",
+    "grid": "(cdiv(8192,64), 1) = (128, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_kernel",
+      "count": 1,
+      "total_us": 1696.446,
+      "avg_us": 1696.446
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 69.0,
+     "min": 68.0,
+     "max": 72.0
+    },
+    "power_w": {
+     "median": 17.54,
+     "min": 11.8,
+     "max": 28.73
+    },
+    "n_samples": 23
+   },
+   "est_unfused_ms_adj": 3.254165291786194,
+   "est_fused_ms_adj": 1.4559893012046814,
+   "estimated_gain_adj": 2.235020057560661
+  },
+  {
+   "name": "router_b2_M16384",
+   "kind": "router_prologue",
+   "variant": "b2",
+   "regime": "decode",
+   "dims": {
+    "M": 16384,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 2.908480048179627,
+   "unfused_ms": 6.85592007637024,
+   "gemm_only_repeat_ms": 2.943120002746582,
+   "gemm_drift_ratio": 1.01190998528205,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.6661779284477234,
+   "rel_tol": 1.3323558568954468,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 3948.937,
+     "avg_us": 3948.937
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 2911.642,
+     "avg_us": 2911.642
+    }
+   ],
+   "unfused_compiled_nocg_ms": 6.84771203994751,
+   "best_unfused_ms": 6.84771203994751,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 12.382959842681885,
+    "compiled_forced_triton_ms": 6.705215930938721,
+    "triton_ms": 3.16268789768219
+   },
+   "best_fused_ms": 3.16268789768219,
+   "measured_gain": 2.165155798321399,
+   "measured_gain_verified": 2.165155798321399,
+   "est_unfused_ms": 6.370870211764705,
+   "est_fused_ms": 2.818048,
+   "estimated_gain": 2.260738714090287,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "stock/forced template did NOT fold the input add on this torch build; surviving separate kernels: ['triton_poi_fused_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 10,
+     "total_us": 5331.034,
+     "avg_us": 533.103
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 3991.093,
+     "avg_us": 3991.093
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 2909.02,
+     "avg_us": 2909.02
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4359,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 3885.739,
+     "avg_us": 3885.739
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 2914.504,
+     "avg_us": 2914.504
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.5714,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 3796.34,
+     "avg_us": 3796.34
+    },
+    {
+     "name": "triton_tem_fused_add_mm_1",
+     "count": 1,
+     "total_us": 2868.637,
+     "avg_us": 2868.637
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.5696,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.6661779284477234,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.6661779284477234,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.6661779284477234,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 4.257536458065851,
+   "nocg_over_gemm_ratio": 2.3543953977725884,
+   "forced_over_gemm_ratio": 2.3054020725139277,
+   "triton_over_gemm_ratio": 1.0874023013022447,
+   "compiled_cudagraph_input_copy_us": 5331.034,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.6661779284477234,
+    "eager_rel_max_vs_fp32": 0.6661779284477234,
+    "rel_tol": 1.3323558568954468,
+    "max_abs_diff_vs_fp32": 1.98773193359375,
+    "config": "BM64 BN256 BK32 w4 s2 (tuned over 8 candidates)",
+    "grid": "(cdiv(16384,64), 1) = (256, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_kernel",
+      "count": 1,
+      "total_us": 3105.898,
+      "avg_us": 3105.898
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 69.5,
+     "min": 68.0,
+     "max": 73.0
+    },
+    "power_w": {
+     "median": 19.380000000000003,
+     "min": 10.92,
+     "max": 30.12
+    },
+    "n_samples": 26
+   },
+   "est_unfused_ms_adj": 6.4421492516994485,
+   "est_fused_ms_adj": 2.8457972705364227,
+   "estimated_gain_adj": 2.2637414542481187
+  },
+  {
+   "name": "router_b2_M32768",
+   "kind": "router_prologue",
+   "variant": "b2",
+   "regime": "prefill",
+   "dims": {
+    "M": 32768,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 5.774303913116455,
+   "unfused_ms": 13.727312088012697,
+   "gemm_only_repeat_ms": 5.820096015930176,
+   "gemm_drift_ratio": 1.007930324330471,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.8563678860664368,
+   "rel_tol": 1.7127357721328735,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 7941.086,
+     "avg_us": 7941.086
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 5693.381,
+     "avg_us": 5693.381
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.44,
+     "avg_us": 1.44
+    }
+   ],
+   "unfused_compiled_nocg_ms": 13.536272048950195,
+   "best_unfused_ms": 13.536272048950195,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 24.72531223297119,
+    "compiled_forced_triton_ms": 13.630256175994873,
+    "triton_ms": 6.497408151626588
+   },
+   "best_fused_ms": 6.497408151626588,
+   "measured_gain": 2.0833341130896126,
+   "measured_gain_verified": 2.0833341130896126,
+   "est_unfused_ms": 12.74174042352941,
+   "est_fused_ms": 5.636096,
+   "estimated_gain": 2.260738714090287,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "stock/forced template did NOT fold the input add on this torch build; surviving separate kernels: ['triton_poi_fused_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 20,
+     "total_us": 10654.952,
+     "avg_us": 532.748
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 7968.482,
+     "avg_us": 7968.482
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 5693.164,
+     "avg_us": 5693.164
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.472,
+     "avg_us": 1.472
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4381,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 7768.364,
+     "avg_us": 7768.364
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 5693.8,
+     "avg_us": 5693.8
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.952,
+     "avg_us": 1.952
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.577,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 7816.942,
+     "avg_us": 7816.942
+    },
+    {
+     "name": "triton_tem_fused_add_mm_1",
+     "count": 1,
+     "total_us": 5684.399,
+     "avg_us": 5684.399
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_poi_fused_add_0",
+    "dominant_frac_of_gpu_time": 0.579,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.8563678860664368,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.8563678860664368,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.7981386184692383,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 4.281955471170666,
+   "nocg_over_gemm_ratio": 2.344225772080036,
+   "forced_over_gemm_ratio": 2.3605020416458258,
+   "triton_over_gemm_ratio": 1.125227949444709,
+   "compiled_cudagraph_input_copy_us": 10654.952,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.7981386184692383,
+    "eager_rel_max_vs_fp32": 0.8563678860664368,
+    "rel_tol": 1.7127357721328735,
+    "max_abs_diff_vs_fp32": 2.0758056640625,
+    "config": "BM64 BN256 BK32 w4 s2 (tuned over 8 candidates)",
+    "grid": "(cdiv(32768,64), 1) = (512, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_kernel",
+      "count": 1,
+      "total_us": 6224.905,
+      "avg_us": 6224.905
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1470.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 71.0,
+     "min": 68.0,
+     "max": 73.0
+    },
+    "power_w": {
+     "median": 22.79,
+     "min": 10.44,
+     "max": 33.78
+    },
+    "n_samples": 31
+   },
+   "est_unfused_ms_adj": 12.884298503398897,
+   "est_fused_ms_adj": 5.6915945410728455,
+   "estimated_gain_adj": 2.2637414542481187
+  },
+  {
+   "name": "router_b2_M131072",
+   "kind": "router_prologue",
+   "variant": "b2",
+   "regime": "prefill",
+   "dims": {
+    "M": 131072,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 23.31112003326416,
+   "unfused_ms": 54.70891189575196,
+   "gemm_only_repeat_ms": 23.19803237915039,
+   "gemm_drift_ratio": 0.9951487678862107,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.9231937527656555,
+   "rel_tol": 1.846387505531311,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 31955.073,
+     "avg_us": 31955.073
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 22606.459,
+     "avg_us": 22606.459
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.856,
+     "avg_us": 1.856
+    }
+   ],
+   "unfused_compiled_nocg_ms": 663.083251953125,
+   "best_unfused_ms": 54.70891189575196,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 880.1724853515625,
+    "compiled_forced_triton_ms": 723.7978210449219,
+    "triton_ms": 26.51959991455078
+   },
+   "best_fused_ms": 26.51959991455078,
+   "measured_gain": 2.062961435015249,
+   "measured_gain_verified": 2.062961435015249,
+   "est_unfused_ms": 50.83588969411765,
+   "est_fused_ms": 22.413312,
+   "estimated_gain": 2.268111455108359,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "stock/forced template did NOT fold the input add on this torch build; surviving separate kernels: ['triton_poi_fused_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 500654.389,
+     "avg_us": 500654.389
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 242596.829,
+     "avg_us": 242596.829
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 77,
+     "total_us": 135256.953,
+     "avg_us": 1756.584
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.409,
+     "avg_us": 1.409
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+    "dominant_frac_of_gpu_time": 0.5699,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 420316.486,
+     "avg_us": 420316.486
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 243598.585,
+     "avg_us": 243598.585
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.272,
+     "avg_us": 2.272
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+    "dominant_frac_of_gpu_time": 0.6331,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_tem_fused_add_mm_1",
+     "count": 1,
+     "total_us": 480142.614,
+     "avg_us": 480142.614
+    },
+    {
+     "name": "triton_poi_fused_add_0",
+     "count": 1,
+     "total_us": 244864.853,
+     "avg_us": 244864.853
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_tem_fused_add_mm_1",
+    "dominant_frac_of_gpu_time": 0.6623,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_poi_fused_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_poi_fused_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.9231937527656555,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.9231937527656555,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.7580904960632324,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 37.75762314704686,
+   "nocg_over_gemm_ratio": 28.44493319098045,
+   "forced_over_gemm_ratio": 31.04946566325803,
+   "triton_over_gemm_ratio": 1.1376373111505682,
+   "compiled_cudagraph_input_copy_us": 135256.953,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.7580904960632324,
+    "eager_rel_max_vs_fp32": 0.9231937527656555,
+    "rel_tol": 1.846387505531311,
+    "max_abs_diff_vs_fp32": 2.20697021484375,
+    "config": "BM128 BN256 BK32 w8 s3 (tuned over 8 candidates)",
+    "grid": "(cdiv(131072,128), 1) = (1024, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_kernel",
+      "count": 1,
+      "total_us": 25702.869,
+      "avg_us": 25702.869
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1335.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 67.0,
+     "min": 66.0,
+     "max": 73.0
+    },
+    "power_w": {
+     "median": 13.31,
+     "min": 10.37,
+     "max": 34.84
+    },
+    "n_samples": 527
+   },
+   "est_unfused_ms_adj": 51.40483134984971,
+   "est_fused_ms_adj": 22.634015500545505,
+   "estimated_gain_adj": 2.271131755150154
+  },
+  {
+   "name": "router_b1_M512",
+   "kind": "router_prologue",
+   "variant": "b1",
+   "regime": "decode",
+   "dims": {
+    "M": 512,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 0.14601599425077436,
+   "unfused_ms": 0.38684800267219543,
+   "gemm_only_repeat_ms": 0.14070399850606916,
+   "gemm_drift_ratio": 0.9636204528691416,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.6725088357925415,
+   "rel_tol": 1.345017671585083,
+   "eager_kernel_evidence": [
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 95.465,
+     "avg_us": 95.465
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<c10::BFloat16, float, true>(int, float, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, float*, float*, c10::BFloat16*)",
+     "count": 1,
+     "total_us": 23.81,
+     "avg_us": 23.81
+    },
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 20.226,
+     "avg_us": 20.226
+    },
+    {
+     "name": "void cublasLt::splitKreduce_kernel<32, 16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, false, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)",
+     "count": 1,
+     "total_us": 5.377,
+     "avg_us": 5.377
+    }
+   ],
+   "unfused_compiled_nocg_ms": 0.2746559977531433,
+   "best_unfused_ms": 0.2746559977531433,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 0.3470240086317063,
+    "compiled_forced_triton_ms": 0.24625600129365924,
+    "triton_ms": 0.47918400168418884
+   },
+   "best_fused_ms": 0.24625600129365924,
+   "measured_gain": 1.115327124253988,
+   "measured_gain_verified": 0.5731743897705461,
+   "est_unfused_ms": 0.3161268705882353,
+   "est_fused_ms": 0.13107200000000002,
+   "estimated_gain": 2.4118566176470586,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "expected for b1: at best folds the residual; the RMSNorm K-reduction survives as separate kernel(s): ['triton_red_fused__fused_rms_norm_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 1,
+     "total_us": 144.63,
+     "avg_us": 144.63
+    },
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 94.808,
+     "avg_us": 94.808
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 34.86,
+     "avg_us": 34.86
+    },
+    {
+     "name": "void cublasLt::splitKreduce_kernel<32, 16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, false, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)",
+     "count": 1,
+     "total_us": 5.19,
+     "avg_us": 5.19
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.5175,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 95.407,
+     "avg_us": 95.407
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 41.484,
+     "avg_us": 41.484
+    },
+    {
+     "name": "void cublasLt::splitKreduce_kernel<32, 16, int, __nv_bfloat16, __nv_bfloat16, float, __nv_bfloat16, false, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16, true, false, false, false>(cublasLt::cublasSplitKParams<float>, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, __nv_bfloat16*, float const*, float const*, __nv_bfloat16 const*, __nv_bfloat16 const*, __nv_bfloat16*, void*, long, float*, int*, float*, float*, float const*, float const*, float const*, float const*, float const*)",
+     "count": 1,
+     "total_us": 5.354,
+     "avg_us": 5.354
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x256_32x4_nn_align8::Params)",
+    "dominant_frac_of_gpu_time": 0.6707,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_tem_fused__fused_rms_norm_add_mm_1",
+     "count": 1,
+     "total_us": 133.616,
+     "avg_us": 133.616
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 42.24,
+     "avg_us": 42.24
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_tem_fused__fused_rms_norm_add_mm_1",
+    "dominant_frac_of_gpu_time": 0.7598,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.504622220993042,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.504622220993042,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.35139200091362,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 2.376616413923202,
+   "nocg_over_gemm_ratio": 1.880999401212424,
+   "forced_over_gemm_ratio": 1.6865001848409034,
+   "triton_over_gemm_ratio": 3.281722691701958,
+   "compiled_cudagraph_input_copy_us": 144.63,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.5732278823852539,
+    "eager_rel_max_vs_fp32": 0.6725088357925415,
+    "rel_tol": 1.345017671585083,
+    "max_abs_diff_vs_fp32": 1.357269287109375,
+    "config": "BM64 BN256 BK32 w8 s3 (tuned over 8 candidates)",
+    "grid": "(cdiv(512,64), 1) = (8, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_rms_kernel",
+      "count": 1,
+      "total_us": 407.856,
+      "avg_us": 407.856
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 67.0,
+     "min": 67.0,
+     "max": 70.0
+    },
+    "power_w": {
+     "median": 15.31,
+     "min": 10.65,
+     "max": 25.43
+    },
+    "n_samples": 22
+   },
+   "small_m_latency_note": "M<=1024: few row-tiles on 24 SM (grid=cdiv(M,BM)) - latency/occupancy-bound regime; BM=64 preferred to raise tile count; see baselines_consistent + drift (spec B.7)",
+   "est_unfused_ms_adj": 0.3196848574261822,
+   "est_fused_ms_adj": 0.13236266374588013,
+   "estimated_gain_adj": 2.4152192799620398
+  },
+  {
+   "name": "router_b1_M1024",
+   "kind": "router_prologue",
+   "variant": "b1",
+   "regime": "decode",
+   "dims": {
+    "M": 1024,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 0.24940799921751022,
+   "unfused_ms": 0.5238400101661683,
+   "gemm_only_repeat_ms": 0.23500800132751462,
+   "gemm_drift_ratio": 0.942263287724636,
+   "drift_clean": false,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": true,
+   "exclusion_reasons": [
+    "gemm_drift_ratio 0.9423 outside [0.95,1.05] (T6.0.4 drift rule)"
+   ],
+   "eager_rel_max_vs_fp32": 0.7084434032440186,
+   "rel_tol": 1.416886806488037,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 237.15,
+     "avg_us": 237.15
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 189.701,
+     "avg_us": 189.701
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<c10::BFloat16, float, true>(int, float, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, float*, float*, c10::BFloat16*)",
+     "count": 1,
+     "total_us": 47.705,
+     "avg_us": 47.705
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.086,
+     "avg_us": 1.086
+    }
+   ],
+   "unfused_compiled_nocg_ms": 0.4360799938440323,
+   "best_unfused_ms": 0.4360799938440323,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 0.7633599936962128,
+    "compiled_forced_triton_ms": 0.47481600940227503,
+    "triton_ms": 0.46395199000835413
+   },
+   "best_fused_ms": 0.46395199000835413,
+   "measured_gain": 0.9399248267825729,
+   "measured_gain_verified": 0.9399248267825729,
+   "est_unfused_ms": 0.5667177411764706,
+   "est_fused_ms": 0.196608,
+   "estimated_gain": 2.8824754901960783,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "expected for b1: at best folds the residual; the RMSNorm K-reduction survives as separate kernel(s): ['triton_red_fused__fused_rms_norm_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 1,
+     "total_us": 291.191,
+     "avg_us": 291.191
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 188.644,
+     "avg_us": 188.644
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 134.463,
+     "avg_us": 134.463
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 0.447,
+     "avg_us": 0.447
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4737,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 188.335,
+     "avg_us": 188.335
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 160.882,
+     "avg_us": 160.882
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.185,
+     "avg_us": 1.185
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+    "dominant_frac_of_gpu_time": 0.5375,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_tem_fused__fused_rms_norm_add_mm_1",
+     "count": 1,
+     "total_us": 213.648,
+     "avg_us": 213.648
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 156.413,
+     "avg_us": 156.413
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_tem_fused__fused_rms_norm_add_mm_1",
+    "dominant_frac_of_gpu_time": 0.5773,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.5334775447845459,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.5334775447845459,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.4435783922672272,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 3.060687692821279,
+   "nocg_over_gemm_ratio": 1.7484603349218335,
+   "forced_over_gemm_ratio": 1.9037721760807884,
+   "triton_over_gemm_ratio": 1.860212950121695,
+   "compiled_cudagraph_input_copy_us": 291.191,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.5026080012321472,
+    "eager_rel_max_vs_fp32": 0.7084434032440186,
+    "rel_tol": 1.416886806488037,
+    "max_abs_diff_vs_fp32": 1.251922607421875,
+    "config": "BM64 BN256 BK32 w8 s3 (tuned over 8 candidates)",
+    "grid": "(cdiv(1024,64), 1) = (16, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_rms_kernel",
+      "count": 1,
+      "total_us": 411.172,
+      "avg_us": 411.172
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 67.0,
+     "min": 66.0,
+     "max": 71.0
+    },
+    "power_w": {
+     "median": 16.95,
+     "min": 11.52,
+     "max": 27.36
+    },
+    "n_samples": 19
+   },
+   "small_m_latency_note": "M<=1024: few row-tiles on 24 SM (grid=cdiv(M,BM)) - latency/occupancy-bound regime; BM=64 preferred to raise tile count; see baselines_consistent + drift (spec B.7)",
+   "est_unfused_ms_adj": 0.5731883829794243,
+   "est_fused_ms_adj": 0.19854399561882022,
+   "estimated_gain_adj": 2.886959039949386
+  },
+  {
+   "name": "router_b1_M2048",
+   "kind": "router_prologue",
+   "variant": "b1",
+   "regime": "decode",
+   "dims": {
+    "M": 2048,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 0.4015520066022873,
+   "unfused_ms": 1.1625120043754578,
+   "gemm_only_repeat_ms": 0.41092801094055176,
+   "gemm_drift_ratio": 1.0233494147311055,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.6549468040466309,
+   "rel_tol": 1.3098936080932617,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 463.819,
+     "avg_us": 463.819
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 364.08,
+     "avg_us": 364.08
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<c10::BFloat16, float, true>(int, float, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, float*, float*, c10::BFloat16*)",
+     "count": 1,
+     "total_us": 281.363,
+     "avg_us": 281.363
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.12,
+     "avg_us": 1.12
+    }
+   ],
+   "unfused_compiled_nocg_ms": 0.8636640012264252,
+   "best_unfused_ms": 0.8636640012264252,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 1.5697279572486877,
+    "compiled_forced_triton_ms": 0.9112159907817841,
+    "triton_ms": 0.7639520168304444
+   },
+   "best_fused_ms": 0.7639520168304444,
+   "measured_gain": 1.1305212659947874,
+   "measured_gain_verified": 1.1305212659947874,
+   "est_unfused_ms": 1.1334354823529411,
+   "est_fused_ms": 0.393216,
+   "estimated_gain": 2.8824754901960783,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "expected for b1: at best folds the residual; the RMSNorm K-reduction survives as separate kernel(s): ['triton_red_fused__fused_rms_norm_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 2,
+     "total_us": 626.019,
+     "avg_us": 313.01
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 445.928,
+     "avg_us": 445.928
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 363.539,
+     "avg_us": 363.539
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 0.448,
+     "avg_us": 0.448
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.436,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 436.516,
+     "avg_us": 436.516
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 362.77,
+     "avg_us": 362.77
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.121,
+     "avg_us": 1.121
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "triton_red_fused__fused_rms_norm_add_0",
+    "dominant_frac_of_gpu_time": 0.5454,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_tem_fused__fused_rms_norm_add_mm_1",
+     "count": 1,
+     "total_us": 410.126,
+     "avg_us": 410.126
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 393.941,
+     "avg_us": 393.941
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_tem_fused__fused_rms_norm_add_mm_1",
+    "dominant_frac_of_gpu_time": 0.5101,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.5228717923164368,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.5228717923164368,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.38140493631362915,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 3.909152317606041,
+   "nocg_over_gemm_ratio": 2.1508148061175834,
+   "forced_over_gemm_ratio": 2.2692353065098434,
+   "triton_over_gemm_ratio": 1.9024983172032612,
+   "compiled_cudagraph_input_copy_us": 626.019,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.6101836562156677,
+    "eager_rel_max_vs_fp32": 0.6549468040466309,
+    "rel_tol": 1.3098936080932617,
+    "max_abs_diff_vs_fp32": 1.514739990234375,
+    "config": "BM128 BN256 BK32 w8 s3 (tuned over 8 candidates)",
+    "grid": "(cdiv(2048,128), 1) = (16, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_rms_kernel",
+      "count": 1,
+      "total_us": 676.491,
+      "avg_us": 676.491
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 67.0,
+     "min": 67.0,
+     "max": 71.0
+    },
+    "power_w": {
+     "median": 16.16,
+     "min": 10.48,
+     "max": 27.78
+    },
+    "n_samples": 19
+   },
+   "est_unfused_ms_adj": 1.1463767659588486,
+   "est_fused_ms_adj": 0.39708799123764044,
+   "estimated_gain_adj": 2.886959039949386
+  },
+  {
+   "name": "router_b1_M4096",
+   "kind": "router_prologue",
+   "variant": "b1",
+   "regime": "decode",
+   "dims": {
+    "M": 4096,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 0.806879997253418,
+   "unfused_ms": 2.299296021461487,
+   "gemm_only_repeat_ms": 0.7784480154514313,
+   "gemm_drift_ratio": 0.9647630603078923,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.6747457385063171,
+   "rel_tol": 1.3494914770126343,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 939.604,
+     "avg_us": 939.604
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 717.687,
+     "avg_us": 717.687
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<c10::BFloat16, float, true>(int, float, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, float*, float*, c10::BFloat16*)",
+     "count": 1,
+     "total_us": 653.106,
+     "avg_us": 653.106
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.569,
+     "avg_us": 1.569
+    }
+   ],
+   "unfused_compiled_nocg_ms": 1.7095680236816406,
+   "best_unfused_ms": 1.7095680236816406,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 3.15937602519989,
+    "compiled_forced_triton_ms": 1.6864799857139587,
+    "triton_ms": 1.2938560247421265
+   },
+   "best_fused_ms": 1.2938560247421265,
+   "measured_gain": 1.321296953439907,
+   "measured_gain_verified": 1.321296953439907,
+   "est_unfused_ms": 2.201334964705882,
+   "est_fused_ms": 0.720896,
+   "estimated_gain": 3.053609625668449,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "expected for b1: at best folds the residual; the RMSNorm K-reduction survives as separate kernel(s): ['triton_red_fused__fused_rms_norm_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 3,
+     "total_us": 1237.205,
+     "avg_us": 412.402
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 1047.544,
+     "avg_us": 1047.544
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 718.771,
+     "avg_us": 718.771
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.087,
+     "avg_us": 1.087
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4118,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 843.711,
+     "avg_us": 843.711
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 722.026,
+     "avg_us": 722.026
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.122,
+     "avg_us": 1.122
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "triton_red_fused__fused_rms_norm_add_0",
+    "dominant_frac_of_gpu_time": 0.5385,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 881.214,
+     "avg_us": 881.214
+    },
+    {
+     "name": "triton_tem_fused__fused_rms_norm_add_mm_1",
+     "count": 1,
+     "total_us": 754.505,
+     "avg_us": 754.505
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_red_fused__fused_rms_norm_add_0",
+    "dominant_frac_of_gpu_time": 0.5387,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.635263979434967,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.635263979434967,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.4497193694114685,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 3.915546346364093,
+   "nocg_over_gemm_ratio": 2.118738882486777,
+   "forced_over_gemm_ratio": 2.0901249150489023,
+   "triton_over_gemm_ratio": 1.6035296811748367,
+   "compiled_cudagraph_input_copy_us": 1237.205,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.6150383353233337,
+    "eager_rel_max_vs_fp32": 0.6747457385063171,
+    "rel_tol": 1.3494914770126343,
+    "max_abs_diff_vs_fp32": 1.38818359375,
+    "config": "BM64 BN256 BK32 w8 s3 (tuned over 8 candidates)",
+    "grid": "(cdiv(4096,64), 1) = (64, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_rms_kernel",
+      "count": 1,
+      "total_us": 1230.567,
+      "avg_us": 1230.567
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 69.0,
+     "min": 67.0,
+     "max": 71.0
+    },
+    "power_w": {
+     "median": 20.645000000000003,
+     "min": 10.52,
+     "max": 27.96
+    },
+    "n_samples": 14
+   },
+   "est_unfused_ms_adj": 2.2265722000447568,
+   "est_fused_ms_adj": 0.7279946506023407,
+   "estimated_gain_adj": 3.0585007708538754
+  },
+  {
+   "name": "router_b1_M8192",
+   "kind": "router_prologue",
+   "variant": "b1",
+   "regime": "decode/prefill-boundary",
+   "dims": {
+    "M": 8192,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 1.5155040025711062,
+   "unfused_ms": 4.726160049438476,
+   "gemm_only_repeat_ms": 1.5336959958076475,
+   "gemm_drift_ratio": 1.0120039229231186,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.7794354557991028,
+   "rel_tol": 1.5588709115982056,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 1973.714,
+     "avg_us": 1973.714
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 1465.736,
+     "avg_us": 1465.736
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<c10::BFloat16, float, true>(int, float, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, float*, float*, c10::BFloat16*)",
+     "count": 1,
+     "total_us": 1315.448,
+     "avg_us": 1315.448
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.184,
+     "avg_us": 1.184
+    }
+   ],
+   "unfused_compiled_nocg_ms": 3.406335949897766,
+   "best_unfused_ms": 3.406335949897766,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 6.320111989974976,
+    "compiled_forced_triton_ms": 3.4078879356384277,
+    "triton_ms": 2.08623993396759
+   },
+   "best_fused_ms": 2.08623993396759,
+   "measured_gain": 1.632763276379065,
+   "measured_gain_verified": 1.632763276379065,
+   "est_unfused_ms": 4.402669929411764,
+   "est_fused_ms": 1.441792,
+   "estimated_gain": 3.053609625668449,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "expected for b1: at best folds the residual; the RMSNorm K-reduction survives as separate kernel(s): ['triton_red_fused__fused_rms_norm_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 5,
+     "total_us": 2602.359,
+     "avg_us": 520.472
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 2175.605,
+     "avg_us": 2175.605
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 1473.588,
+     "avg_us": 1473.588
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.152,
+     "avg_us": 1.152
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4162,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 1927.968,
+     "avg_us": 1927.968
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 1469.601,
+     "avg_us": 1469.601
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.187,
+     "avg_us": 1.187
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "triton_red_fused__fused_rms_norm_add_0",
+    "dominant_frac_of_gpu_time": 0.5673,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 1788.106,
+     "avg_us": 1788.106
+    },
+    {
+     "name": "triton_tem_fused__fused_rms_norm_add_mm_1",
+     "count": 1,
+     "total_us": 1469.581,
+     "avg_us": 1469.581
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_red_fused__fused_rms_norm_add_0",
+    "dominant_frac_of_gpu_time": 0.5489,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.6278379559516907,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.6278379559516907,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.4346660375595093,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 4.170303726847756,
+   "nocg_over_gemm_ratio": 2.2476588277687135,
+   "forced_over_gemm_ratio": 2.2486829001156217,
+   "triton_over_gemm_ratio": 1.3765981023000995,
+   "compiled_cudagraph_input_copy_us": 2602.359,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.8290373086929321,
+    "eager_rel_max_vs_fp32": 0.7794354557991028,
+    "rel_tol": 1.5588709115982056,
+    "max_abs_diff_vs_fp32": 1.561126708984375,
+    "config": "BM128 BN256 BK32 w8 s3 (tuned over 8 candidates)",
+    "grid": "(cdiv(8192,128), 1) = (64, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_rms_kernel",
+      "count": 1,
+      "total_us": 2051.585,
+      "avg_us": 2051.585
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 70.0,
+     "min": 67.0,
+     "max": 72.0
+    },
+    "power_w": {
+     "median": 22.93,
+     "min": 10.45,
+     "max": 28.65
+    },
+    "n_samples": 15
+   },
+   "est_unfused_ms_adj": 4.4531444000895135,
+   "est_fused_ms_adj": 1.4559893012046814,
+   "estimated_gain_adj": 3.0585007708538754
+  },
+  {
+   "name": "router_b1_M16384",
+   "kind": "router_prologue",
+   "variant": "b1",
+   "regime": "decode",
+   "dims": {
+    "M": 16384,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 2.9165440797805786,
+   "unfused_ms": 9.563087940216064,
+   "gemm_only_repeat_ms": 2.9134879112243652,
+   "gemm_drift_ratio": 0.9989521267388343,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.6935230493545532,
+   "rel_tol": 1.3870460987091064,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 3926.38,
+     "avg_us": 3926.38
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 2908.228,
+     "avg_us": 2908.228
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<c10::BFloat16, float, true>(int, float, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, float*, float*, c10::BFloat16*)",
+     "count": 1,
+     "total_us": 2720.149,
+     "avg_us": 2720.149
+    }
+   ],
+   "unfused_compiled_nocg_ms": 6.775775909423827,
+   "best_unfused_ms": 6.775775909423827,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 12.432064056396484,
+    "compiled_forced_triton_ms": 6.81003212928772,
+    "triton_ms": 4.155536174774171
+   },
+   "best_fused_ms": 4.155536174774171,
+   "measured_gain": 1.630541914315558,
+   "measured_gain_verified": 1.630541914315558,
+   "est_unfused_ms": 8.739803858823528,
+   "est_fused_ms": 2.818048,
+   "estimated_gain": 3.101367989056087,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "expected for b1: at best folds the residual; the RMSNorm K-reduction survives as separate kernel(s): ['triton_red_fused__fused_rms_norm_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 10,
+     "total_us": 5452.29,
+     "avg_us": 545.229
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 3870.683,
+     "avg_us": 3870.683
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 2910.813,
+     "avg_us": 2910.813
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4457,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 3916.855,
+     "avg_us": 3916.855
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 2929.005,
+     "avg_us": 2929.005
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_red_fused__fused_rms_norm_add_0",
+    "dominant_frac_of_gpu_time": 0.5721,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 3737.398,
+     "avg_us": 3737.398
+    },
+    {
+     "name": "triton_tem_fused__fused_rms_norm_add_mm_1",
+     "count": 1,
+     "total_us": 2857.794,
+     "avg_us": 2857.794
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_red_fused__fused_rms_norm_add_0",
+    "dominant_frac_of_gpu_time": 0.5667,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.4427923560142517,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.4427923560142517,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.4427923560142517,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 4.262601118420878,
+   "nocg_over_gemm_ratio": 2.3232208134270995,
+   "forced_over_gemm_ratio": 2.334966296754912,
+   "triton_over_gemm_ratio": 1.4248151446031996,
+   "compiled_cudagraph_input_copy_us": 5452.29,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.6839492321014404,
+    "eager_rel_max_vs_fp32": 0.6935230493545532,
+    "rel_tol": 1.3870460987091064,
+    "max_abs_diff_vs_fp32": 1.5052490234375,
+    "config": "BM128 BN256 BK32 w8 s3 (tuned over 8 candidates)",
+    "grid": "(cdiv(16384,128), 1) = (128, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_rms_kernel",
+      "count": 1,
+      "total_us": 4076.196,
+      "avg_us": 4076.196
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 69.0,
+     "min": 67.0,
+     "max": 72.0
+    },
+    "power_w": {
+     "median": 20.91,
+     "min": 13.06,
+     "max": 29.81
+    },
+    "n_samples": 21
+   },
+   "est_unfused_ms_adj": 8.840107468306089,
+   "est_fused_ms_adj": 2.8457972705364227,
+   "estimated_gain_adj": 3.106372881803966
+  },
+  {
+   "name": "router_b1_M32768",
+   "kind": "router_prologue",
+   "variant": "b1",
+   "regime": "prefill",
+   "dims": {
+    "M": 32768,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 5.6964640617370605,
+   "unfused_ms": 19.1975040435791,
+   "gemm_only_repeat_ms": 5.789295911788941,
+   "gemm_drift_ratio": 1.0162963987915643,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.7495946884155273,
+   "rel_tol": 1.4991893768310547,
+   "eager_kernel_evidence": [
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 8406.342,
+     "avg_us": 8406.342
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<c10::BFloat16, float, true>(int, float, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, float*, float*, c10::BFloat16*)",
+     "count": 1,
+     "total_us": 6590.025,
+     "avg_us": 6590.025
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 5692.153,
+     "avg_us": 5692.153
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.408,
+     "avg_us": 1.408
+    }
+   ],
+   "unfused_compiled_nocg_ms": 13.543248176574707,
+   "best_unfused_ms": 13.543248176574707,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 24.40761566162109,
+    "compiled_forced_triton_ms": 13.458335876464844,
+    "triton_ms": 7.63372802734375
+   },
+   "best_fused_ms": 7.63372802734375,
+   "measured_gain": 1.7741329175028584,
+   "measured_gain_verified": 1.7741329175028584,
+   "est_unfused_ms": 17.479607717647056,
+   "est_fused_ms": 5.636096,
+   "estimated_gain": 3.101367989056087,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "expected for b1: at best folds the residual; the RMSNorm K-reduction survives as separate kernel(s): ['triton_red_fused__fused_rms_norm_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 20,
+     "total_us": 10825.352,
+     "avg_us": 541.268
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 7739.527,
+     "avg_us": 7739.527
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 5691.555,
+     "avg_us": 5691.555
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.376,
+     "avg_us": 1.376
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+    "dominant_frac_of_gpu_time": 0.4463,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 7820.266,
+     "avg_us": 7820.266
+    },
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 5692.788,
+     "avg_us": 5692.788
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.409,
+     "avg_us": 1.409
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "triton_red_fused__fused_rms_norm_add_0",
+    "dominant_frac_of_gpu_time": 0.5787,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 7599.09,
+     "avg_us": 7599.09
+    },
+    {
+     "name": "triton_tem_fused__fused_rms_norm_add_mm_1",
+     "count": 1,
+     "total_us": 5679.054,
+     "avg_us": 5679.054
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_red_fused__fused_rms_norm_add_0",
+    "dominant_frac_of_gpu_time": 0.5723,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.639711856842041,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.639711856842041,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.4651816785335541,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 4.284695803764681,
+   "nocg_over_gemm_ratio": 2.3774833001307263,
+   "forced_over_gemm_ratio": 2.3625771584980217,
+   "triton_over_gemm_ratio": 1.3400818375418568,
+   "compiled_cudagraph_input_copy_us": 10825.352,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.7424530386924744,
+    "eager_rel_max_vs_fp32": 0.7495946884155273,
+    "rel_tol": 1.4991893768310547,
+    "max_abs_diff_vs_fp32": 1.522552490234375,
+    "config": "BM128 BN256 BK32 w8 s3 (tuned over 8 candidates)",
+    "grid": "(cdiv(32768,128), 1) = (256, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_rms_kernel",
+      "count": 1,
+      "total_us": 7506.884,
+      "avg_us": 7506.884
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1455.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 71.0,
+     "min": 68.0,
+     "max": 73.0
+    },
+    "power_w": {
+     "median": 29.29,
+     "min": 10.7,
+     "max": 33.72
+    },
+    "n_samples": 22
+   },
+   "est_unfused_ms_adj": 17.680214936612177,
+   "est_fused_ms_adj": 5.6915945410728455,
+   "estimated_gain_adj": 3.106372881803966
+  },
+  {
+   "name": "router_b1_M131072",
+   "kind": "router_prologue",
+   "variant": "b1",
+   "regime": "prefill",
+   "dims": {
+    "M": 131072,
+    "n": 256,
+    "k": 6144
+   },
+   "gemm_only_ms": 23.66828727722168,
+   "unfused_ms": 293.7416076660156,
+   "gemm_only_repeat_ms": 23.322768211364746,
+   "gemm_drift_ratio": 0.985401602498316,
+   "drift_clean": true,
+   "baselines_consistent": true,
+   "excluded_from_aggregate": false,
+   "exclusion_reasons": [],
+   "eager_rel_max_vs_fp32": 0.8998427987098694,
+   "rel_tol": 1.7996855974197388,
+   "eager_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 175477.824,
+     "avg_us": 175477.824
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::vectorized_layer_norm_kernel<c10::BFloat16, float, true>(int, float, c10::BFloat16 const*, c10::BFloat16 const*, c10::BFloat16 const*, float*, float*, c10::BFloat16*)",
+     "count": 1,
+     "total_us": 86521.103,
+     "avg_us": 86521.103
+    },
+    {
+     "name": "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+     "count": 1,
+     "total_us": 32139.83,
+     "avg_us": 32139.83
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.368,
+     "avg_us": 2.368
+    }
+   ],
+   "unfused_compiled_nocg_ms": 662.7653198242188,
+   "best_unfused_ms": 293.7416076660156,
+   "addmm_ms": null,
+   "addmm_dropped": true,
+   "addmm_drop_reason": "DROP (spec B.3): torch.addmm / cuBLASLt beta-accumulate adds an [M,256] tensor to the GEMM OUTPUT; the router prologue residual is applied to the [M,6144] INPUT at a different stage - structurally inexpressible as a beta-accumulate epilogue (clean contrast to F1, where addmm was the star fused path). Recorded, not measured: addmm_ms=null.",
+   "fused_paths": {
+    "compiled_ms": 860.8643798828125,
+    "compiled_forced_triton_ms": 723.7277526855469,
+    "triton_ms": 30.00643253326416
+   },
+   "best_fused_ms": 30.00643253326416,
+   "measured_gain": 9.789287924860217,
+   "measured_gain_verified": 9.789287924860217,
+   "est_unfused_ms": 69.78735887058824,
+   "est_fused_ms": 22.413312,
+   "estimated_gain": 3.113656690746474,
+   "est_model_note": "faithful F3-analog (residual tile-local; RMSNorm reduction K-local to one CTA's loop) - NOT structure-blind, no INVALID flag needed (contrast T6.A epilogue / T6.C)",
+   "fused_verified": false,
+   "fused_verified_forced": false,
+   "forced_prologue_folded": false,
+   "forced_note": "expected for b1: at best folds the residual; the RMSNorm K-reduction survives as separate kernel(s): ['triton_red_fused__fused_rms_norm_add_0']",
+   "kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 452629.284,
+     "avg_us": 452629.284
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 313550.667,
+     "avg_us": 313550.667
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 77,
+     "total_us": 126209.02,
+     "avg_us": 1639.078
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.728,
+     "avg_us": 1.728
+    }
+   ],
+   "fusion_evidence": {
+    "n_kernels": 4,
+    "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+    "dominant_frac_of_gpu_time": 0.5072,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "nocg_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 408353.986,
+     "avg_us": 408353.986
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 244886.908,
+     "avg_us": 244886.908
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.272,
+     "avg_us": 2.272
+    }
+   ],
+   "nocg_fusion_evidence": {
+    "n_kernels": 3,
+    "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+    "dominant_frac_of_gpu_time": 0.6251,
+    "triton_gemm_template_present": false,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "forced_kernel_evidence": [
+    {
+     "name": "triton_tem_fused__fused_rms_norm_add_mm_1",
+     "count": 1,
+     "total_us": 480056.748,
+     "avg_us": 480056.748
+    },
+    {
+     "name": "triton_red_fused__fused_rms_norm_add_0",
+     "count": 1,
+     "total_us": 244949.393,
+     "avg_us": 244949.393
+    }
+   ],
+   "forced_fusion_evidence": {
+    "n_kernels": 2,
+    "dominant_kernel": "triton_tem_fused__fused_rms_norm_add_mm_1",
+    "dominant_frac_of_gpu_time": 0.6621,
+    "triton_gemm_template_present": true,
+    "separate_elementwise_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ],
+    "vendor_fused_ok": false,
+    "vendor_separate_kernels": [
+     "triton_red_fused__fused_rms_norm_add_0"
+    ]
+   },
+   "numerics_ok": true,
+   "rel_max_vs_fp32": 0.6381639242172241,
+   "nocg_numerics_ok": true,
+   "nocg_rel_max_vs_fp32": 0.6381639242172241,
+   "forced_numerics_ok": true,
+   "forced_rel_max_vs_fp32": 0.5411731004714966,
+   "triton_numerics_ok": true,
+   "compiled_over_gemm_ratio": 36.37206063115969,
+   "nocg_over_gemm_ratio": 28.00225094707478,
+   "forced_over_gemm_ratio": 30.577952016919333,
+   "triton_over_gemm_ratio": 1.2677906171158528,
+   "compiled_cudagraph_input_copy_us": 126209.02,
+   "triton_info": {
+    "numerics_ok": true,
+    "rel_max_vs_fp32": 0.802483856678009,
+    "eager_rel_max_vs_fp32": 0.8998427987098694,
+    "rel_tol": 1.7996855974197388,
+    "max_abs_diff_vs_fp32": 1.904510498046875,
+    "config": "BM128 BN256 BK32 w8 s3 (tuned over 8 candidates)",
+    "grid": "(cdiv(131072,128), 1) = (1024, 1)",
+    "no_split_k": true,
+    "fused_by_construction": true,
+    "kernel_evidence": [
+     {
+      "name": "_router_res_rms_kernel",
+      "count": 1,
+      "total_us": 29264.019,
+      "avg_us": 29264.019
+     }
+    ],
+    "n_kernels": 1
+   },
+   "compile_error": null,
+   "nocg_error": null,
+   "forced_error": null,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1305.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 68.0,
+     "min": 67.0,
+     "max": 73.0
+    },
+    "power_w": {
+     "median": 14.36,
+     "min": 10.73,
+     "max": 35.56
+    },
+    "n_samples": 318
+   },
+   "est_unfused_ms_adj": 70.58849708270283,
+   "est_fused_ms_adj": 22.634015500545505,
+   "estimated_gain_adj": 3.1186908518729948
+  }
+ ],
+ "aggregate": {
+  "b2": {
+   "n_rows": 8,
+   "n_included": 6,
+   "excluded_rows": [
+    "router_b2_M512",
+    "router_b2_M1024"
+   ],
+   "measured_gain_geomean": 1.8437789197185377,
+   "measured_gain_verified_geomean": 1.8437789197185377,
+   "estimated_gain_geomean": 2.2300147900323455,
+   "estimated_gain_adj_geomean": 2.232943792971817,
+   "forced_prologue_folded_rows": []
+  },
+  "b1": {
+   "n_rows": 8,
+   "n_included": 7,
+   "excluded_rows": [
+    "router_b1_M1024"
+   ],
+   "measured_gain_geomean": 1.8600509487385417,
+   "measured_gain_verified_geomean": 1.6913077064847553,
+   "estimated_gain_geomean": 2.9493861608351244,
+   "estimated_gain_adj_geomean": 2.954019861036396,
+   "forced_prologue_folded_rows": []
+  }
+ }
+}

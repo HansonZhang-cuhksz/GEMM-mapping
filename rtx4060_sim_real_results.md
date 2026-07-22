@@ -204,3 +204,152 @@ magnitude over-prediction that the unlocked round could not cleanly separate.
 fused-epilogue kernel (dual-accumulator for SwiGLU; grouped for the real MoE layer) should
 recover a real but likely-half-of-estimated gain, worth it at the +5–11% configs (small
 hidden/inter, residual epilogues at vendor parity) and marginal at large-h dense FFN dims.
+
+---
+
+# T6 — RMSNorm + MoE-structure fusion tests (A–E), LOCKED CLOCKS
+
+> Clocks locked **1500 MHz core / 5501 MHz VRAM** by the host throughout (verified before the
+> run; ClockSampler medians 1500 on most rows). The 35 W power cap still dips below the lock on
+> the heaviest sustained configs (A-epilogue rows show medians down to 1140 MHz; flagged by the
+> per-config drift probes). Raw data: `rtx4060_rmsnorm.json` (A), `rtx4060_router_prologue.json`
+> (B), `rtx4060_fusion.json` (C rows `router_topk`, D rows `ffn_levels`/`ffn_grouped`, E rows
+> `merge_r2f`, plus top-level `router_topk_drop_evaluation` and `merge_token_independence`).
+> Host decisions (asked, not assumed): A-epilogue prefill capped at 32768; A-epilogue input
+> includes a pre-materialized residual (layer-faithful `RMSNorm(mla_o(x)+res)`); all five tests
+> run. Per T6.0.4, structure-blind estimator cells (A-epilogue, C) are excluded from every
+> est-vs-measured aggregate; all quoted numbers below are **measured** unless tagged est.
+
+## T6.A — RMSNorm into mla_o (epilogue) + prologue fallback
+
+**Epilogue (cross-tile reduction over N): structurally infeasible — confirmed on hardware.**
+0/7 stock-path fusions (compiled/nocg/forced all leave a separate reduction kernel;
+profiler-verified; `addmm` N/A — no reduction epilogue in cuBLASLt's binding). The hand
+wide-tile kernel (option 1, BM=16) failed at all 7 configs — a Triton `CompilationError`:
+`tl.arange` requires a power-of-2 width, so the `[BM, 6144]` full-row tile cannot even be
+expressed; padding N to 8192 would need a `16·8192·4 = 512 KiB` fp32 stage, and the spec's own
+budget arithmetic (`16·6144·4 = 384 KiB` vs 99 KiB, recorded per-row in `smem_budget_note`)
+already rules the design out regardless of expression. With no
+fusable path, measured gains sit at 0.99–1.01 (n=7, M=512…32768). The structure-blind est
+cell (`est=1.033 INVALID`) is the recorded model-vs-hardware mismatch: a tile-local traffic
+model predicts a fuse the machine cannot express. This is the same lesson as T4-§4, one level
+harder: SwiGLU needed 2 column-slices; RMSNorm needs the whole row.
+
+**Prologue (reduction over K, tile-local): fusable only by the hand kernels — and the payoff
+is host-dependent.** P2 (sumsq pass → GEMM with scaled-A-load prologue) passes fp32 numerics
+on 10/10 configs (P1 on 9/10 — its two-pass variant misses the tolerance at tpe=1024, rel
+0.062 vs 0.051); no stock path removes the normalized-A round-trip (0/10, verified). Measured
+verified gains vs the honest 2-kernel P2 estimate (unfused baseline that physically writes
+normalized x):
+
+| host | configs | measured verified gain | honest-P2 est | reading |
+|---|---|---|---|---|
+| up_gate `[tpe, 4096, 6144]` | tpe 16…4096 | **0.74…1.01** (drift-clean geomean 0.87, n=5) | +0.4…+2.6% | hand GEMM cannot match cuBLAS on wide shapes; the small predicted saving is eaten by the GEMM-quality gap |
+| router `[M, 256, 6144]` | M ∈ {2048, 32768} | **+26.8% / +17.1%** | +27.4% / +29.6% | ✔ on the skinny host the prologue saving is large and the hand kernel is competitive — matches the estimate |
+
+## T6.B — router prologue (b2 residual; b1 residual+RMSNorm)
+
+**The largest verified gains of the whole study.** The router GEMM (`n=256`) is dominated by
+reading `[M, 6144]` inputs, so folding the residual (b2) — and additionally the RMSNorm (b1,
+gamma pre-folded into `Wp = Wr·diag(gamma)`, untimed) — into the A-load removes entire passes
+over the hidden state:
+
+| variant | drift-clean gains (M ≥ 2048) | geomean | est geomean | fused path |
+|---|---|---|---|---|
+| b2 residual | 1.27 → 2.17 (generally grows with M; peak at M=16384) | **1.844** | 2.230 (est) | hand kernel only |
+| b1 +RMSNorm | 1.13 → 1.77 | **1.478** | 3.037 (est) | hand kernel only (single-pass co-accumulated sumsq, no split-K) |
+
+Inductor's forced template folded the input add **0/16** — no stock path fuses either variant;
+the hand kernel is the only fused realization (b1's K-reduction is un-synthesizable by any
+compiler on this stack, per B.3). The b1 M=131072 row (measured gain 9.79×) is excluded: its
+eager baseline ran 294 ms vs a 23.7 ms GEMM — a memory-pressure-degraded baseline at ~6.0 GiB
+of buffers, not a fusion effect. Two mandated caveats: the router is a minor cost center
+(~16× below one up_gate expert-layer in FLOPs), and in the real layer `h`/`x` are shared
+downstream, so the router-attributable saving is only the avoided re-read of `x` — smaller
+than this standalone microbenchmark shows. The estimator over-predicts (delivered ≈ 0.83 of
+est for b2, ≈ 0.5 for b1) mainly because its optimal-mapping fused GEMM is faster than a real
+skinny-N kernel — but the direction and the order of magnitude are confirmed.
+
+## T6.C — top-k as the router-GEMM epilogue: attempt-and-DROP (condition met)
+
+Per the C.6 protocol (`router_topk_drop_evaluation`): **(a)** no stock path fused on 9/9 —
+compiled/nocg/forced all leave a distinct topk/sort kernel (recorded evidence; top-k is a
+cross-tile selection outside the pointwise/broadcast epilogue vocabulary of
+cuBLASLt/CUTLASS/inductor); **(b)** the one viable custom route (BN=256 full-row-resident
+Triton kernel, feasible on this SMEM, numerics-verified value+index-set) never beat
+GEMM+torch.topk: measured gains 0.75–1.00 on all 6 drift-clean configs (the drift-tainted
+M=512 row reads 0.58). The estimator's traffic-only bound (recorded cells +1.3…+1.9%; spec
+a-priori ceiling ~3.5% — flagged NOT-a-prediction) did not materialize — the full-row
+accumulator's GEMM-efficiency tax exceeds the fixed logit-round-trip ceiling. **Test C is
+dropped from the gains tables as specified; the raw rows + profiler evidence remain in the
+JSON for audit.** (The host's stated doubt is confirmed.)
+
+## T6.D — MoE FFN levels L1/L2/L3 at GLM per-expert dims
+
+**L2 (SwiGLU into up_gate at `[tpe, 4096, 6144]`): neutral-to-negative in the per-expert
+regime.** Isolated up+SwiGLU verified ratios `r_up_swiglu` = 0.74–1.10 across tpe 16…4096;
+only tpe=64 wins (+10.0% vs isolated est +2.0%); full-FFN `r_L2` = 0.80–1.07 vs est
+1.003–1.022. This
+refines T4: SwiGLU fusion paid on dense mid-size shapes (M=2048/8192), but at the skinny-tpe
+GLM expert shapes the hand kernel (and the forced template) cannot beat cuBLAS by enough to
+collect the small predicted saving. Grouped-bmm cross-check (E=8, tpe∈{64,512}): grouped runs
+0.80–0.97× of 8× single-expert (occupancy benefit); grouped `r_L2` 0.97/1.02 — consistent.
+(The grouped rows' fp32-reference numerics field is invalid — a reference-construction bug
+(rel ~10³, flagged in the worklog); the timing ratios are unaffected.)
+
+**L3/F6 (whole FFN in one kernel): infeasible in Triton on this hardware — estimator-only.**
+Evidence recorded per D.4 drop rules: the 4-chunk formulation needs 176–322 KiB SMEM
+(Required, from `OutOfResources`) vs 101376 B because Triton stages every `tl.dot` operand
+with no cross-phase buffer reuse (the paper budget was 84 KiB); an 8-chunk variant fits SMEM
+but miscompiles (corrupt output, rel 57–252, while the identical phase-1 chunk in isolation
+is correct at rel 0.011) — a Triton SMEM-liveness failure with 8 persistent dot operands. The
+tpe-parametrized estimator (`estimate_ffn_fused_m`, acceptance-checked: reproduces 0.2591× at
+m=64, scales with mt, m0 SMEM-capped at 16) stands as the prediction: **est** `r_L3` = 1.005×
+at `mt=1` (tpe=16) collapsing to 0.15× (~6.7× slower) for `tpe ≥ 256` — the `mt×`
+weight-re-read cliff that makes F6 a SKIP at deployment batch sizes. A CUTLASS-class kernel
+with explicit SMEM management would be required to test it on silicon.
+
+## T6.E — residual2 into the expert-merge (r2f): the cleanest confirmation in the study
+
+Stock `torch.compile` **fuses this out of the box** (8/8 measured configs: one
+`triton_per_fused_add_mul_sum_unsqueeze` kernel absorbs mul+sum+residual-add;
+profiler-verified; `forced` N/A — no GEMM to template; `addmm`-analog `baddbmm` attempted per
+spec — never the fastest fused path (it beats only the cudagraph-taxed default compile),
+dropped where >1.5× the reduction):
+
+| tokens | 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768 | 49152 |
+|---|---|---|---|---|---|---|---|---|
+| verified gain | 1.250 | 1.202 | 1.248 | 1.253 | 1.242 | 1.284 | 1.232 | 1.230 |
+| stock-compile-only gain | 1.250 | 1.128 | 1.197 | 1.231 | 1.226 | 1.284 | 1.232 | 1.230 |
+
+**est = 12/10 = 1.20 exactly — profile- AND token-independent** (both sides pure traffic/bw;
+stock ≡ adjusted). Measured delivered gain ≈ 1.20–1.28, i.e. ~100%+ of the predicted ratio at
+every size, drift-clean geomean **1.246 verified / 1.218 stock-only** (n=6). The 131072 point
+is arithmetically infeasible on 8 GiB (`expert_outs` alone = 12.9 GB, dropped with the
+arithmetic recorded) and is **defensibly covered by the token-independence assertion**:
+verified gains at the mandated 512/8192/32768/49152 points are 1.2497/1.2423/1.2318/1.2298 —
+spread 1.6% ≤ 5% → `merge_gain_token_independent: true` (`merge_token_independence` in the
+JSON). Measurement notes: the 49152 point OOMed at end-of-sweep and exposed an int32
+pointer-arithmetic overflow in the hand kernel (flat indices > 2³¹ — fixed to int64); it was
+re-measured in a fresh process, where its *eager* paths paged into host memory (12.4 s, WSL2
+oversubscription) — its gain is computed against the clean device-resident 2-kernel baseline
+(45.3 ms vs 36.9 ms fused). This is the strongest verdict-A datapoint: a memory-bound fusion
+the estimator prices exactly, captured by stock tooling with **no custom kernel** — precisely
+the class of win the C500's stack could not collect.
+
+## T6 verdict — how the five tests sharpen the study
+
+The realizability hierarchy is now measured end-to-end. **Fusions win where (1) the epilogue/
+prologue is tile-local AND (2) the fused kernel matches vendor GEMM quality (or there is no
+GEMM at all):** expert-merge +13…+28% out of the box via stock compile (verified-path gains
++20…+28% including the optional hand kernel) (E), router prologue +27%…+117% via
+hand kernels (B, A-router). **Fusions are neutral-to-negative where cuBLAS's lead on the host
+GEMM exceeds the traffic saving** (SwiGLU/RMSNorm-prologue at wide per-expert shapes — D, A).
+**Fusions are structurally unreachable — by any stock path, and sometimes by any Triton
+kernel — where the epilogue crosses tiles**: RMSNorm-over-N (A), top-k selection (C), and the
+two-GEMM F6 chain (D). The estimator's tile-local traffic model predicts the *direction*
+correctly wherever its structural assumptions hold and over-predicts magnitude by ~1.2–2×
+(kernel-quality gap), but it is **structure-blind** — its A-epilogue and top-k "wins" are
+artifacts its own `Epilogue` vocabulary cannot see, now flagged as such in every table. For
+the C500: the recoverable wins are the E-class (any working compiler) and B-class (custom
+prologue kernels); the D/F6-class needs CUTLASS-grade SMEM control on any vendor.
