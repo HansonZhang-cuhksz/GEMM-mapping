@@ -10,16 +10,22 @@ decode / +4.6% prefill on H100) **actually materialize on real hardware?**
 |---|---|---|
 | **H100** | analytical estimate | fusion **+6% (decode) / +4.6% (prefill)** |
 | **MetaX C500** | measured (MACA stack) | fusion **≈0% / negative** through the vendor stack; Triton-fused GEMM **3.4× slower** than vendor |
-| **RTX 4060** | measured (mature CUDA stack) | **verdict A** — with a *custom* fused kernel the gain is real (**+3.7% geomean**, ~78% of the +4.6% predicted, fused kernel at **~vendor GEMM speed**); through *stock* tooling the null reproduces (**0.992**) |
+| **RTX 4060** | measured (mature CUDA stack) | **verdict A** — with a *custom* fused kernel the gain is real (**+2.9–4.2% geomean**, fused kernel at **~vendor GEMM speed**); through *stock* tooling the null reproduces (**0.99**). **But** at LOCKED clocks the estimator **over-predicts the magnitude ~2×** (delivered fraction **≈0.41–0.49**) |
 
-The 4060 result is verified sound: est-vs-measured single-GEMM calibration holds (geomean 0.937, 96%
-within 1.5×, in the prior band); every headline number traces to the raw JSON; numerics validated vs
-fp32; DVFS/throttling handled by drift probes + contemporaneous-GEMM referencing.
+The 4060 result is verified sound across two rounds: est-vs-measured single-GEMM calibration holds
+(geomean 0.94, in the prior band); every headline number traces to the raw JSON; numerics validated
+vs fp32. **Round 2 (locked 1500/5501, the calibration point)** is the clean apples-to-apples test and
+the definitive magnitude read: measured verified gain **+4.2%** (drift-clean n=7) vs estimator **+8.6%**
+→ **delivered ≈0.49**. Round 1's higher apparent delivered-fraction (~0.78) was a **DVFS artifact** —
+the unlocked memory clock (215 vs 168 GB/s) shrank the *predicted* gain toward the measured one; at the
+locked calibration bandwidth the ~2× over-prediction is exposed. Verdict A (direction + ranking) is
+unchanged; only the magnitude sharpens.
 
 ## The verdict: the estimator is roughly right; the C500 null was a *tooling* result, not a *model* result
 
 - **The fusion benefit is real** (verdict A, not B). On the 4060's drift-clean dense configs the
-  predicted gain materializes (+3.7% measured vs +4.6% predicted; delivered fraction ~0.78), and the
+  predicted gain materializes in DIRECTION (measured +4.2% vs predicted +8.6% at locked clocks;
+  delivered ≈0.49 — the estimator is ~2× optimistic on MAGNITUDE), and the
   genuinely-fused kernel runs at ~0.99× the vendor GEMM — **no fusion tax on a mature stack.** So the
   estimator over-predicts modestly (~20%) but is directionally and roughly magnitude-correct.
 - **The C500 was not measuring wrongly** — it correctly found that its *vendor stack* can't fuse.
@@ -49,8 +55,10 @@ that doesn't exist anywhere yet.
 
 ## Bottom line — the sim–real gap has two independent layers
 
-1. **Estimator accuracy (model):** roughly right — 72–96% on single GEMMs; the +6% fusion prediction
-   delivers ~78% when actually built. The roofline model is trustworthy for relative fusion verdicts.
+1. **Estimator accuracy (model):** right on DIRECTION/ranking, but ~2× optimistic on MAGNITUDE — the
+   single-GEMM roofline is 72–96% accurate, yet the built fusion delivers only ~0.41–0.49 of the
+   predicted gain at the locked calibration point. Trustworthy for *whether* to fuse, loose on *how
+   much*. (Round 1's ~0.78 was a DVFS artifact of an unlocked memory clock.)
 2. **Realizability (tooling):** the predicted win requires a **custom fused-epilogue kernel** on any
    current stack; off-the-shelf `torch.compile`/cuBLAS realize ~0% (except the residual). This is what
    the C500 measured, and it reproduces on NVIDIA.
@@ -60,9 +68,33 @@ task (dual-accumulator, grouped for MoE), not a compiler-flag away, on NVIDIA or
 
 ## Confidence / caveats
 
-- 4060 verdict rests on 5 of 12 drift-clean configs (WSL2, unlockable clocks + thermal throttling on a
-  35 W part); the machine's sensitivity analysis brackets it (+3.8/+4.8% adding back tainted-positive
-  rows; only counting an unmeasurable-baseline row erodes it to +1.4/+6.0%). Moderate, not high,
-  confidence — but verdict B ("gain ≈ 0 with working tooling") is firmly excluded.
-- All fusion measurements are the **dense analog**; the grouped MoE (the real workload) is untested on
-  hardware. This remains the key open experiment.
+- Round 2 (locked clocks) is the confident read: 7 of 12 configs drift-clean at 1500 MHz (all 6 SwiGLU
+  configs clean), so the delivered ≈0.49 / ~2×-over-prediction is on solid footing, not the round-1
+  5-of-12 DVFS-limited sample. Verdict B ("gain ≈ 0 with working tooling") is firmly excluded; the
+  open question is now the *magnitude* over-prediction, not the sign.
+- **T6 now run (round 3, locked clocks)** — the five tests below. It answered the RMSNorm-placement,
+  top-k, F6, and merge questions on hardware (see the T6 update section). What remains untested is still
+  the **grouped-MoE** SwiGLU fusion at scale (single-expert stands in) and the F6 on-chip kernel (Triton
+  OOMs — needs CUTLASS).
+- All *GEMM-epilogue* fusion measurements are the **dense / single-expert analog**; a fused *grouped*
+  GEMM+SwiGLU kernel exists on no stack, so the real GLM MoE FFN fusion is still untested at scale. The
+  *memory-bound* merge fusion (E) is the one piece measured directly and realistically.
+
+## T6 update — the realizability hierarchy (RTX 4060, locked clocks, verified)
+
+The five T6 tests (adversarially verified — every number reproduces from raw JSON, no fabrication)
+turn the single "~2× over-prediction" into a **three-tier hierarchy where the realized fraction of the
+estimator's prediction is set by the fusion's STRUCTURE, not its size:**
+
+| tier | fusions | realized | why |
+|---|---|---|---|
+| **Memory-bound** (delivers ~100%) | expert-merge / **r2f** (E) | **1.00–1.07×** the predicted 1.20 | stock `torch.compile` fuses it, **no custom kernel** — no vendor GEMM to lose quality against; estimator was if anything *conservative* |
+| **GEMM-epilogue** (delivers ~0.5, can lose) | SwiGLU (D/L2), residual/RMSNorm-prologue (B, A/S5) | b1 **0.49**, b2 **0.83**, SwiGLU **≤0.99 (no clean win)** | needs a custom kernel (**0/16 forced-template folds** → NOT stock-fusable on this build); the hand kernel can't beat cuBLAS at skinny GLM per-expert M → SwiGLU is **neutral-to-negative** at real decode dims |
+| **Cross-tile** (unreachable without CUTLASS) | RMSNorm-**epilogue** (A/S3), top-k (C), F6 two-GEMM chain (D/L3) | **0 (no verified fused realization)** | S3 mla_o-epilogue placement **structurally INFEASIBLE** (3.9× over SMEM); top-k dropped (≤ the ~3.5% ceiling); F6 **estimator-only** — Triton OOMs, its 0.259× crossover cliff is a **CUTLASS-gated hypothesis** |
+
+**Corrections this forces:**
+- **S3 vs S5 answered on hardware:** the RMSNorm→mla_o *epilogue* (S3) is **not buildable** on 99 KB SMEM; only the up_gate-*prologue* (S5) is — and it nets a *loss* on the wide up_gate host (geomean 0.87), winning only on the skinny N=256 router.
+- **SwiGLU fusion does NOT cleanly win at real GLM per-expert dims.** Every drift-clean row is ≤0.99×; the apparent "+10% @ tpe64" was a drift-throttle artifact (the one unclean row) and the grouped cross-check is a loss (0.974). So the earlier +5–7% dense-proxy win was a **large-M artifact** that vanishes at the actual decode `M`=16–64.
+- **F6's crossover cliff (1.005→0.259→0.15) exists only in the estimator** — Triton couldn't build the on-chip kernel; realizing/testing it needs CUTLASS.
+
+**Net sim-real law:** the roofline estimator is a trustworthy **upper bound whose realized fraction is a function of fusion class** — ~1.0 (memory-bound), ~0.5 and possibly negative (GEMM-epilogue, kernel-quality-limited), 0 (cross-tile, until a CUTLASS backend exists). "Whether to fuse" is well-predicted; "how much you get" depends on whether a vendor-quality fused kernel exists.
