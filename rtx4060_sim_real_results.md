@@ -1,191 +1,206 @@
 # RTX 4060 sim–real fusion gap — results (task `RTX4060_SIM_REAL_TASK.md`)
 
-**Date:** 2026-07-21 · **Device:** RTX 4060 Laptop GPU (8 GiB, 24 SM, cc 8.9, 99 KiB opt-in
+> **CLOCKS LOCKED FOR THIS RUN.** The host locked the GPU to **1500 MHz core / 5501 MHz VRAM**
+> (`nvidia-smi -lgc/-lmc`) — the exact calibration point of the `rtx4060-measured` profile —
+> before this round. The lock was verified held under load (idle and sustained-GEMM samples all
+> read 1500/5501), with one caveat: the 35 W power limit can still throttle *below* the lock
+> under minutes of continuous max load (observed once, §5). The prior UNLOCKED-clock round is
+> archived as `*_unlocked.*` and compared in §7.
+
+**Date:** 2026-07-22 · **Device:** RTX 4060 Laptop GPU (8 GiB, 24 SM, cc 8.9, 99 KiB opt-in
 SMEM/block, 32 MiB L2) · **Stack:** torch 2.11.0+cu130, triton 3.6.0, python 3.13, driver 610.53
-(WSL2) · **Clocks:** UNLOCKED (no root; task-§7 fallback: per-config nvidia-smi sampling + a
-busy-GEMM clock warmer before every timed region — see §5).
-**Raw data:** `rtx4060_measured.json` (T2+T3), `rtx4060_fusion.json` (T4; derived/annotation
-fields under `annotations_post_hoc`), `notes/rtx4060_worklog.md` (step log).
-This writeup was adversarially reviewed against the raw JSONs; every figure below exists in (or
-is derived by a formula stated here from) a deliverable file.
+(WSL2). **Raw data:** `rtx4060_measured.json` (T2+T3), `rtx4060_fusion.json` (T4; derived and
+annotation fields under `annotations_post_hoc`), `notes/rtx4060_worklog.md` (step log, both
+rounds). Adversarially reviewed against the raw JSONs; every figure exists in (or is derived by
+a stated formula from) a deliverable.
 
 ---
 
-## Verdict: **A — the fusion gains are real and the estimator's predictions are approximately right; the C500 null was a tooling problem.** (Scope: demonstrated in the dense regime; the grouped-MoE regime is unfalsifiable on any current stack — see below.)
+## Verdict: **A — the fusion gains are real on working fused paths; the C500 null was a tooling problem.** With a quantitative caveat: the estimator gets the *direction* and *ranking* right but **over-predicts the magnitude ~2×** at these dims (delivered fraction ≈ 0.4–0.5).
 
-On the 5 drift-clean configs (of 12; criterion |drift−1| ≤ 0.05, see §3) the predicted fusion
-gain **materializes**: measured verified-fused gain geomean **+3.7%** vs predicted **+4.6%**
-(T2-adjusted profile; +5.7% stock), with per-config delivered-fraction geomean ≈ 0.78 (range
-0.37–1.74). The genuinely-fused kernels run at **~vendor-GEMM speed**: hand Triton SwiGLU kernel
-0.98–0.99× the bare cuBLAS GEMM on clean configs; forced Triton residual template 1.00–1.01×. Nothing
-resembling the C500's 3.4× Triton fusion tax exists on this stack (worst inductor-template case:
-1.59×).
+At locked clocks, with 10 of 12 configs carrying a verified-fused path and 7 of 12 fully
+drift-clean:
 
-**Why the C500 saw nothing — the tooling story, sharpened by primitive:**
+- Measured verified-fused gain geomean: **+2.9%** (all 10) / **+4.2%** (drift-clean 7), vs
+  estimator **+6.9% / +8.6%** (stock ≈ adjusted at locked clocks). Per-config verified gains
+  reach **+10.8%** (`swiglu_M8192_h1024`) and the clean residual config matches its estimate
+  *exactly* (+5.2% measured vs +5.3% predicted, fused template at 1.0005× vendor speed).
+- The genuinely-fused kernels run at ~vendor speed: hand Triton SwiGLU 1.03–1.08× the bare
+  cuBLAS GEMM; forced Triton residual template 1.00× at the config that matches its estimate.
+  Nothing resembling C500's 3.4× Triton tax (worst template case 1.18×).
+- The C500-style "measure only what stock tooling gives you" view is now *positive* too
+  (geomean 1.061 vs eager) — but the *verified-fused* metric is the honest one, and it says:
+  real, positive, roughly half of predicted.
 
-- **F1 residual:** out-of-the-box paths DO capture it on CUDA — `torch.addmm` wins +0.6…+1.2%
-  on all 4 configs and even default `torch.compile` fuses it into the vendor epilogue
-  (profiler-verified: no separate add kernel). On the C500, addmm was 1% *slower* — a genuine
-  vendor-library difference, i.e. tooling.
-- **F4 SwiGLU:** NO out-of-the-box path can fuse it, even on NVIDIA — inductor refuses Triton
-  GEMM templates below 68 SMs, and even when forced, SwiGLU is *structurally* unfusable as a
-  template epilogue (§4). Only our custom dual-accumulator Triton kernel collects the gain
-  (+5.6…+7.4% on clean configs). The C500 equivalent would be a custom MACA-CUTLASS kernel.
-- **Grouped MoE (the actual GLM decode regime):** no fused path exists on *either* stack (hand
-  kernel is dense-only; inductor's bmm template can't fold SwiGLU) — the estimator's predicted
-  +6.4…+7.9% there is untested and untestable without a custom grouped kernel.
-- If one only measures what stock tooling delivers (the C500 methodology), the null reproduces
-  on NVIDIA too: C500-convention `measured_gain` geomean across all 12 configs is **0.992**.
+**Why the C500 saw nothing — the tooling story, per primitive:**
 
-| §5 criterion | observed |
+- **F1 residual:** out-of-the-box paths capture it on CUDA — `torch.addmm` +1.4…+2.1% on the
+  two untainted configs, and both compile variants fuse via the vendor epilogue
+  (profiler-verified). On the C500, addmm was 1% *slower*: a vendor-library difference.
+- **F4 SwiGLU:** NO out-of-the-box path can fuse it even on NVIDIA — inductor refuses GEMM
+  templates below 68 SMs, and even forced, SwiGLU is *structurally* unfusable as a template
+  epilogue (§4). Only the custom dual-accumulator Triton kernel collects the gain
+  (+2.4…+10.8% on 4 of 6 configs; ≈0 at h=4096 where the predicted gain is smallest).
+- **Grouped MoE (the actual GLM decode regime):** no fused path exists on *either* stack — the
+  estimator's prediction there (+7.9%) remains untestable without a custom grouped kernel.
+
+| §5 criterion | observed (locked clocks) |
 |---|---|
-| `g_meas ≈ g_est`, fused kernel at ~vendor speed | **Yes** on the 5 drift-clean configs (measured +3.7% vs adjusted-est +4.6% geomean; fused kernels 0.98–1.01× vendor) → **A** |
-| `g_meas ≈ 0` despite competitive fused kernel | No on the 5 clean configs; 1 config (`swiglu_M2048_h1024`) has an unmeasurable baseline (see §3) and is no-data, not a B-signature |
-| fused path itself slow (C500-style) | Never at C500 scale. Worst inductor template 1.59× vendor; the hand kernel stayed at 1.01–1.05× even in the throttled configs (re-referenced to the contemporaneous GEMM) |
+| `g_meas ≈ g_est`, fused kernel at ~vendor speed | Direction and ranking: yes; magnitude: measured ≈ 0.4–0.5× predicted. Fusion is genuinely faster (10-config verified geomean +2.9%, max +10.8%; fused kernels 1.00–1.08× vendor) → **A**, with the over-prediction caveat |
+| `g_meas ≈ 0` despite competitive fused kernel | Only at the h=4096 extreme (predicted +4%, measured −0.7…−2.6% — the hand kernel's 1.06–1.08× overhead eats a small predicted gain) — not the across-the-board null the C500 showed |
+| fused path itself slow (C500-style) | Never: worst fused path 1.18× vendor, vs C500's 3.4× |
 
 ---
 
-## 1. Calibration context (T2, T3)
+## 1. Calibration context (T2, T3) — the profile reproduces at its calibration point
 
-- **T2 peaks:** 18.79 TF/s bf16 GEMM = **1.019×** the profile's 18.43 (implied sustained tensor
-  clock 1529 MHz vs the locked-1500 calibration); HBM 214.8 GB/s = **1.264×** the profile's 170
-  (unlocked memory clock ~7 GHz vs locked 5501 MHz). An adjusted profile
-  (`clock_hz=1.529e9, bw=2.148e11`) is carried through all estimator comparisons below.
-- **T3 single-GEMM validation (24 shapes):** geomean est/meas = **0.937** (stock) / 0.919
-  (adjusted); **96% of shapes within 1.5×, 95.8% within 2×** (the one outlier either way is
-  2048×1024×1024 at ratio 0.327, a DVFS-flagged shape that measures 13.4 TF/s standalone) —
-  inside the prior 0.72–0.96 calibration band. The T4 regime (up_gate / mla_o shapes) sits at
-  ratios 0.88–1.15. The estimator's absolute scale is trustworthy here, so its *relative*
-  fusion predictions are the right yardstick.
+- **T2 peaks (locked):** 18.25 TF/s bf16 = **0.990×** the profile's 18.43; HBM 167.9 GB/s =
+  **0.988×** the profile's 170. The `rtx4060-measured` profile is confirmed to ~1% at its own
+  locked-clock operating point (implied sustained tensor clock 1485 MHz vs the 1500 lock). The
+  T2-adjusted profile is therefore ≈ stock; both are carried through anyway.
+- **T3 single-GEMM validation (24 shapes, locked):** geomean est/meas = **0.943** (stock) /
+  0.952 (adjusted); **96% within 1.5×, 100% within 2×; ratios span 0.663–0.991** — in the prior
+  0.72–0.96 band, and the estimator is now *uniformly* mildly optimistic (no pessimistic
+  ratios; round 1's >1 ratios were boost-clock artifacts). FFN-stage subset: 0.948, 100% within
+  1.5×. Every round-1 DVFS-flaky shape resolved (e.g. 2048×1024×1024: 13.9 TF/s in-sweep now).
 
 ## 2. What was measured (T4)
 
-Per config, all timed bf16 with median-of-30 CUDA events after 15 warmup + clock warmer:
+Per config, bf16, median of 30 CUDA-event samples after ≥15 warmup (the round-1 clock-warmer is
+retained as a no-op guard; drift probes + per-config clock sampling verify the lock):
 
 | path | what it is | fused? (profiler-verified) |
 |---|---|---|
 | `unfused` | eager: cuBLAS GEMM + separate elementwise kernel(s) | no (C500-comparable baseline) |
-| `nocg` | `torch.compile` max-autotune-no-cudagraphs: cuBLAS GEMM + ONE fused pointwise kernel | swiglu: no — **best unfused realization** (= the estimator's unfused model); residual: vendor-epilogue fused |
-| `compiled` | default `torch.compile(mode="max-autotune")` (cudagraphs on) | Triton-template: never (0/12). Residual: vendor-epilogue fused, but its cudagraph input-copies make it lose to eager in 10/12 configs and to the best unfused realization in 11/12 |
-| `forced` | inductor Triton GEMM template forced (`is_big_gpu` patch + TRITON-only backends, no cudagraphs) | residual: **yes** (single `triton_tem_fused_addmm` kernel, 4/4); SwiGLU: **no** (structural, §4) |
-| `triton` | hand dual-accumulator Triton GEMM+SwiGLU kernel, mini-autotuned (6 tile configs) | **yes** by construction (1 kernel) |
-| `addmm` | `torch.addmm` (cuBLASLt β-accumulate) | **yes** (no separate add kernel; the DtoD copy of `res` is the β-accumulate input) |
+| `nocg` | compile max-autotune-no-cudagraphs: cuBLAS GEMM + ONE fused pointwise kernel | swiglu: no — **best unfused realization** (= the estimator's unfused model); residual: vendor-epilogue fused (4/4) |
+| `compiled` | default `torch.compile(mode="max-autotune")` (cudagraphs on) | Triton-template: never (0/12). Residual: vendor-fused, but the cudagraph input-copies mean it beats eager in only 1/12 configs (10 strict losses, 1 tie) |
+| `forced` | Triton GEMM template forced (`is_big_gpu` patch + TRITON-only backends, no cudagraphs) | residual: **yes** (single `triton_tem_fused_addmm`, 4/4); SwiGLU: **no** (structural, §4) |
+| `triton` | hand dual-accumulator Triton GEMM+SwiGLU kernel, mini-autotuned | **yes** by construction (1 kernel); numerics pass vs fp32 reference on 6/6 |
+| `addmm` | `torch.addmm` (cuBLASLt β-accumulate) | **yes** (no separate add kernel) |
 
 `measured_gain_verified` = best *unfused* realization ÷ best *verified-fused* path (>1 ⇒ fusion
-faster) — the verdict metric. `measured_gain` (vs eager, C500-convention) is also in the JSON.
+faster) — the verdict metric. `measured_gain` (vs eager, C500-convention) also stored.
 
-## 3. Estimated vs measured fusion gain
+## 3. Estimated vs measured fusion gain (locked clocks)
 
-`est` = fusion_time_estimator at the same dims, stock / T2-adjusted profile. `drift` = bare GEMM
-re-measured at config end ÷ start (≈1.00 = clean; the probe was added before the full run for
-exactly this purpose; the ±0.05 clean threshold was fixed at analysis time). `late-phase gain` =
-best-unfused ÷ fused where **both** operands were measured after the compile/autotune phase
-(swiglu: `nocg/triton`; residual: `nocg/forced`; stored in
-`annotations_post_hoc.derived_late_phase`) — drift-robust within each config.
+`est` = fusion_time_estimator at the same dims (stock profile; adjusted ≈ identical at locked
+clocks, both in the JSON). `drift` = bare GEMM re-measured at config end ÷ start. `clk` =
+sampled median graphics clock during the config.
 
-**SwiGLU → up_gate epilogue (F4-analog, dense; verified path = hand Triton kernel):**
+**SwiGLU → up_gate epilogue (F4-analog, dense; verified path = hand Triton kernel). All six
+configs drift-clean (0.98–1.02) at 1500 MHz:**
 
-| config (M, h=inter) | est stock | est adj | measured (verified) | late-phase gain | fused kernel ÷ contemporaneous GEMM | drift | reading |
-|---|---|---|---|---|---|---|---|
-| 2048, 1024 | 1.158 | 1.127 | — | (1.06) | 1.09× | 0.86 | **baselines mutually inconsistent** (bare GEMM 0.556→0.478 ms across the config; eager unfused 0.458 < both — impossible at steady clock): its late-phase field (1.06, pro-fusion) and repeat-referenced ratio (1.09×, anti) disagree → no usable datapoint either direction |
-| 2048, 2048 | 1.079 | 1.064 | 1.046 | 1.046 | 1.08× | 0.87 | drift-tainted (excluded from aggregate); late-phase agrees with est |
-| 2048, 4096 | 1.040 | 1.032 | **1.056** | 1.056 | **0.99×** | **1.00** | ✔ clean, confirms (above est) |
-| 8192, 1024 | 1.159 | 1.128 | **1.074** | 1.074 | **0.98×** | **1.01** | ✔ clean, confirms (58% of predicted) |
-| 8192, 2048 | 1.079 | 1.064 | 0.883 | 0.890 | 1.006× | 1.35 | throttle order-confound (see §5): excluded; note the fused kernel itself held vendor parity |
-| 8192, 4096 | 1.041 | 1.034 | 0.832 | 0.940 | 1.047× | 1.23 | same |
+| config (M, h=inter) | est gain | measured (verified) | hand kernel ÷ vendor GEMM | delivered fraction |
+|---|---|---|---|---|
+| 2048, 1024 | 1.158 | **1.062** | 1.04× | 0.39 |
+| 2048, 2048 | 1.079 | **1.024** | 1.07× | 0.30 |
+| 2048, 4096 | 1.040 | 0.993 | 1.06× | −0.18 |
+| 8192, 1024 | 1.159 | **1.108** | 1.08× | 0.68 |
+| 8192, 2048 | 1.079 | **1.088** | 1.03× | 1.10 |
+| 8192, 4096 | 1.041 | 0.974 | 1.08× | −0.63 |
 
 **Residual → GEMM epilogue (F1-analog; verified paths = addmm and forced Triton template):**
 
-| config | est stock | est adj | addmm gain | forced-template gain | forced ÷ contemporaneous GEMM | drift |
+| config | est gain | addmm gain | forced-template gain | forced ÷ vendor GEMM | drift / clk | reading |
 |---|---|---|---|---|---|---|
-| task dims M=2048 (n=16384,k=6144) | 1.053 | 1.043 | 1.012 | 1.036 | 1.00× | 1.14 (excluded) |
-| task dims M=8192 | 1.053 | 1.043 | 1.008 | **1.035** | **1.00×** | **1.00** ✔ |
-| GLM dims M=2048 (n=6144,k=16384) | 1.020 | 1.016 | **1.006** | 1.005 | 1.01× | **1.00** ✔ |
-| GLM dims M=8192 | 1.020 | 1.016 | 1.007 | **1.015** | **1.00×** | **1.00** ✔ |
+| task dims M=2048 (n=16384,k=6144) | 1.053 | 1.021 | **1.052** | **1.0005×** | 1.00 / 1500 | ✔ clean — matches est exactly |
+| task dims M=8192 | 1.053 | **1.014** | 0.934 | 1.13× | 1.06 / 1500 | template loses parity at these dims; addmm carries a smaller-than-predicted gain |
+| GLM dims M=2048 (n=6144,k=16384) | 1.020 | 0.888 | 0.978 | 1.04× | 1.13 / 1500 | drift-tainted (power dips): contradicts both its round-1 value (1.006) and its M=8192 sibling — treat as unreliable |
+| GLM dims M=8192 | 1.020 | **1.003** | 0.988 | 1.09× | 1.22 / **1290** | POWER-throttled below the lock (35 W cap) — order-confounded |
 
-**Aggregates (all in `annotations_post_hoc.aggregates`):**
+**MoE grouped-bmm rows (E∈{8,32}):** still no verified-fused path on this stack
+(`measured_gain_verified` null). Their eager-vs-best-path gains (+3.0%, +13.4%) come from the
+forced Triton *bmm* being a faster GEMM with a still-separate silu kernel — tooling speed, not
+fusion. The estimator's grouped prediction (+7.9%) remains untestable.
 
-| set | measured verified gain (geomean) | est stock | est adj |
+**Aggregates (`annotations_post_hoc.aggregates`):**
+
+| set | measured verified gain | est gain | delivered fraction (from geomeans) |
 |---|---|---|---|
-| drift-clean, n=5 (the verdict set) | **1.0368** | 1.0569 | 1.0461 |
-| clean-5 + the two drift-excluded *positive* rows (1.046 at drift 0.87, 1.036 at drift 1.14), n=7 | 1.0379 | — | 1.0481 |
-| every drift<1.05 config incl. the unmeasurable-baseline row (0.879), n=7 | 1.0139 | — | 1.0598 |
-| all configs with a verified path, n=10 | 0.9825 | — | — |
-| all 12, C500-convention `measured_gain` | 0.992 | — | — |
+| all configs with a verified path, n=10 | **1.0285** | 1.0692 | **0.41** |
+| drift-clean, n=7 (6 swiglu + residual_M2048) | **1.0419** | 1.0860 | **0.49** |
+| swiglu only, n=6 (all clean) | 1.0402 | 1.0916 | 0.44 |
+| all 12, C500-convention `measured_gain` vs eager | 1.0611 | — | — |
 
-Transparency: the verdict rests on 5 of 12 configs; the excluded 7 are 1 inconsistent-baseline
-row, 1 drift-0.87 row and 1 drift-1.14 row (both *positive*, 1.046/1.036 — the symmetric rule
-costs the verdict evidence too), 2 throttle-confounded rows, and 2 MoE rows with no verified
-path. The sensitivity rows above bracket the reading: adding back the tainted-but-plausible
-positive rows leaves the result unchanged (+3.8% vs +4.8%); the only cut that erodes it to
-+1.4% vs +6.0% is the one that counts the unmeasurable-baseline row's 0.879 as evidence. The
-per-row late-phase gains (1.005–1.074 on every non-throttled row) support the clean-set reading.
+Per-row delivered fractions are noisy (−1.1…+1.1; per-row gains carry ±2%-ish measurement
+noise against effects of similar size) — the geomeans are the robust statement.
 
-**MoE grouped-bmm rows (E∈{8,32}):** no verified-fused path exists on this stack (hand kernel
-dense-only; inductor bmm template cannot fold SwiGLU either) — `measured_gain_verified` is null.
-Their unfused-vs-compiled gains (0.99 / 0.81, the latter with drift 1.28) measure tooling, not
-fusion. This is the *actual* GLM decode regime: a production fix needs a custom grouped fused
-kernel on any vendor.
+## 4. Why the compiler paths cannot capture F4 (structural finding, unchanged from round 1)
 
-## 4. Why the compiler paths cannot capture F4 (structural finding)
+`silu(gu[:, :inter]) * gu[:, inter:]` combines **two disjoint column-slices** of the GEMM
+output — elements of two *different* output tiles. Inductor's template-epilogue fusion is
+elementwise-on-own-tile only, so even forced it emits `triton_tem_fused_mm` + a separate
+`triton_poi_fused_mul_silu_slice` kernel (`forced_kernel_evidence` in the JSON). cuBLASLt has
+no SwiGLU epilogue in torch's binding. A true fused SwiGLU needs gate and up tiles computed in
+the same CTA with dual accumulators — our 36-line hand Triton kernel does that, runs at
+1.03–1.08× the vendor GEMM at locked clocks, and is the only path that collects the F4 gain.
+(Split gate/up weights would make the epilogue single-tile and compiler-fusable, at the cost of
+one extra `g` round-trip.)
 
-`silu(gu[:, :inter]) * gu[:, inter:]` combines **two disjoint column-slices** of the GEMM output
-— elements from two *different* output tiles. Inductor's template-epilogue fusion is
-elementwise-on-own-tile only, so even with templates forced it emits `triton_tem_fused_mm` + a
-separate `triton_poi_fused_mul_silu_slice` kernel (profiler evidence in
-`rtx4060_fusion.json:forced_kernel_evidence`). cuBLASLt has no SwiGLU epilogue in torch's
-binding. A true fused SwiGLU needs a kernel that computes the gate tile and the up tile in the
-same CTA with dual accumulators — our 36-line hand Triton kernel does exactly that, runs at
-0.98–0.99× the vendor GEMM on clean configs, and is the only path that collects the predicted
-gain. (Split gate/up weights would make the epilogue single-tile and compiler-fusable at the
-cost of one extra `g` round-trip — an implementation avenue for stacks without custom kernels.)
+**Where the ~2× over-prediction plausibly comes from** (hypotheses, consistent with the data):
+(i) the estimator charges the eliminated activation read/write at DRAM bandwidth, but at the
+small-h configs the `gu` tensor (8–67 MB for h ≤ 2048) is partly resident in the 32 MiB L2 when
+the elementwise kernel runs, so the "eliminated traffic" was cheaper than modeled — the largest
+single over-prediction is the smallest config (M=2048 h=1024: est +15.8% vs measured +6.2%,
+9.6 points); (ii) at
+h=4096 the predicted gain is small (+4%) and the hand kernel's 1.06–1.08× overhead vs cuBLAS
+eats it — a kernel-engineering gap, not a model gap. The residual config where the fused
+template hits exact vendor parity delivers its estimate exactly (+5.2% vs +5.3%), supporting
+(ii).
 
-The C500's "3.4× Triton fusion tax" does not generalize, but the tax is shape-dependent even on
-NVIDIA: forced inductor GEMM templates run **0.96–1.59×** the vendor GEMM here (1.59× on the
-drift-clean `swiglu_M8192_h1024`); it is the *hand* kernel that consistently reaches ~1.0×.
+**Numerics** (per-path evidence + `annotations_post_hoc.residual_numerics`): hand SwiGLU kernel
+passes vs an fp32 reference on 6/6 configs (it is *more* accurate than eager — fp32 gate/up
+through the silu). Residual rows' strict `numerics_ok=false` flags are false alarms (fused
+rounds once vs eager twice; ≤1–2 bf16 ulp apart; on task-ordering dims the fused path is
+strictly closer to fp32).
 
-**Numerics** (per-path evidence in the JSON; post-hoc analysis in
-`annotations_post_hoc.residual_numerics`): the swiglu hand kernel is *more* accurate than the
-eager reference vs an fp32 ground truth on 5/6 configs (rel-max 0.004–0.022 vs eager's
-0.015–0.022; equal on the sixth) because it keeps gate/up in fp32 through the silu. The residual
-rows' strict `numerics_ok=false` flags are false alarms: addmm/fused round once where eager
-rounds twice; on task-ordering dims the fused path is strictly closer to fp32 (rel-max 0.004 vs
-0.012–0.015) with 99.8% of elements within 1 bf16 ulp of eager; on GLM-ordering dims (k=16384)
-*both* paths carry comparable bf16 accumulation error from cancellation (rel-max ≈1.07–1.35 both
-ways on near-zero outputs) and agree with each other to within max-abs 4.0 at |values| up to
-~512 (≤2 bf16 ulp; 88% of elements within 1).
+## 5. Caveats
 
-## 5. Caveats and methodology honesty
+- **The 1500/5501 lock held in 11/12 configs** (every ClockSampler median 1500). The exception:
+  `residual_glm_M8192` sagged to a 1290 MHz median — on a 35 W part, `-lgc` caps the clock but
+  cannot floor it against the power limit under minutes of continuous ~100 ms GEMMs. Its
+  sibling `residual_glm_M2048` shows drift 1.13 for the same reason. Both flagged, treated as
+  unreliable rather than evidence.
+- The two h=4096 swiglu rows measure slightly negative verified gains against a small (+4%)
+  prediction; they are honest datapoints (clean drift), not throttle artifacts — they mark the
+  regime edge where the fusion benefit falls under the hand kernel's overhead.
+- The estimator's over-prediction (~2× at these dims) is now cleanly measurable *because*
+  clocks are locked; it was partially masked in round 1 by the unlocked memory clock (which
+  shrank the predicted gains). This is a calibration finding about the vector-kernel/L2 model,
+  not a refutation of the fusion direction — B ("gain ≈ 0 with working tooling") remains
+  excluded by the 10-config +2.9% geomean and the +5.2/+10.8% star configs.
+- 8 GiB forces scaled/dense configs; grouped-MoE covered qualitatively only.
 
-- **Clocks could not be locked** (WSL2, no root). Mitigations: continuous busy-GEMM warmer
-  before every timed region (without it, short kernels measure at idle 210 MHz — up to 7×
-  wrong; T3's band went 0.768 → 0.937 with it), per-config clock sampling, per-config drift
-  probes. Residual risk is the in-config ordering: baseline paths are measured minutes before
-  the fused paths (autotune in between), so any drift lands asymmetrically on the fused side.
-- **Thermal throttling** on this 35 W part: sustained clocks sag 1725 → 1140 MHz across the run.
-  In the two throttled swiglu configs the *fused-path* times run 26–39% over the estimator while
-  the earlier-measured unfused paths run only 3–11% over — an ordering artifact, not fused-path
-  slowness (the hand kernel is 1.006×/1.047× the *contemporaneous* GEMM there). They are
-  excluded as order-confounded, **not** counted as §5-criterion-3 evidence.
-- The estimator over-predicts the realized gain on clean configs (delivered fraction geomean
-  0.78, range 0.37–1.74; the M=8192 h=1024 row delivers 58% of predicted). This is consistent
-  with its T3 absolute bias (geomean 0.94) and the unlocked memory clock making vector kernels
-  ~26% cheaper than the stock profile assumes — but at n=5 a ~20% structural over-prediction of
-  fusion benefit cannot be excluded. What *can* be excluded is verdict B's "gain ≈ 0 with
-  working tooling": every clean config shows a real, positive, roughly predicted-magnitude gain.
-- 8 GiB forced scaled/dense configs; the full GLM MoE layer was not run (grouped regime covered
-  qualitatively only — no fused path exists to measure).
+## 6. Answers to §6's checklist (locked clocks)
 
-## 6. Answers to §6's checklist
-
-| quantity | C500 (measured) | **RTX 4060 (measured here)** |
+| quantity | C500 (measured) | **RTX 4060 (locked 1500/5501, measured here)** |
 |---|---|---|
-| per-fusion gain, decode-analog | ≈0% / negative | **+3.7% geomean verified on drift-clean configs** (per-config +0.6%…+7.4%; vs est +1.6%…+12.8% adjusted, +2.0%…+15.9% stock). All-configs stock-tooling view: 0.992 (the C500 null reproduces without custom kernels) |
-| F1 residual via addmm | 1% *slower* | **+0.6…+1.2% faster** (4/4 configs); forced Triton template +0.5…+3.6% at 1.00× vendor speed |
-| F4 SwiGLU via compile | no fuse | no fuse either — SM-count gate AND structural (§4). Hand fused kernel: **+5.6…+7.4%** on clean configs at 0.98–0.99× vendor speed |
-| Triton fused GEMM vs vendor | 3.4× slower | inductor templates **0.96–1.59×** (shape-dependent); hand fused kernel **~0.99×** (clean configs) |
-| single most informative datapoint | — | max-autotune alone does **not** produce a fused-and-winning Triton GEMM — but the *hand-written* fused Triton GEMM both (a) runs at vendor speed and (b) beats the best unfused path by +5.6…+7.4% (clean configs) |
+| per-fusion gain, decode-analog | ≈0% / negative | verified-fused geomean **+2.9%** (n=10) / **+4.2%** (drift-clean n=7); per-config −2.6%…**+10.8%** vs est +2.0%…+15.9%; ≈0.4–0.5× the predicted magnitude |
+| F1 residual via addmm | 1% *slower* | **+1.4…+2.1% faster** (untainted configs); forced Triton template **+5.2% at 1.0005× vendor** on the clean config — exactly the estimate |
+| F4 SwiGLU via compile | no fuse | no fuse either — SM-count gate AND structural (§4). Hand fused kernel: **+2.4…+10.8%** on 4/6 configs, ≈0 at h=4096 |
+| Triton fused GEMM vs vendor | 3.4× slower | hand kernel **1.03–1.08×**; forced templates **1.00–1.18×** — the C500 fusion tax does not generalize |
+| single most informative datapoint | — | max-autotune alone does **not** produce a fused-and-winning Triton GEMM — but hand-written fused Triton GEMMs run at ~vendor speed and win where the predicted gain exceeds their small overhead |
 
-**Actionable for C500:** verdict A says the win is recoverable — but only via a custom
-fused-epilogue kernel (MACA-CUTLASS), a dual-accumulator design for SwiGLU, and for the real
-MoE decode layer it must be a *grouped* fused kernel (a gap that exists on NVIDIA today too).
+## 7. Locked vs unlocked clocks (round 2 vs round 1, archived as `*_unlocked.*`)
+
+| quantity | unlocked (R1) | **locked 1500/5501 (R2)** |
+|---|---|---|
+| T2 peak TFLOP/s | 18.79 (1.019× profile; boost) | **18.25 (0.990×)** |
+| T2 HBM GB/s | 214.8 (1.264×; mem clock ~7 GHz) | **167.9 (0.988×)** |
+| T3 geomean est/meas | 0.937 (max ratio 1.148; 95.8% within 2×) | **0.943 (max 0.991; 100% within 2×)** |
+| T4 drift-clean configs | 5/12 (DVFS + thermal throttle) | **7/12** (residual power-cap dips remain) |
+| T4 verified gain geomean (all with path) | 0.983 (throttle-confounded rows dragged it) | **1.0285** |
+| verified gain, clean set | +3.7% vs est +4.6% (adjusted) | **+4.2% vs est +8.6%** |
+| `swiglu_M8192_h2048` verified | 0.883 (throttle order-confound, excluded) | **1.088 vs est 1.079** — vindicates the R1 exclusion |
+| flaky small shapes | 2048×1024×1024 at 2.2–5.8 TF/s in-sweep | clean 13.9 TF/s |
+
+Two lessons: (1) every round-1 anomaly attributed to DVFS resolved under the lock — the
+methodology calls (clock warmer, drift probes, clean-set restriction) were correct; (2) the
+estimator's predicted gains are bandwidth-sensitive (unlocked mem clock shrank them), so the
+locked run is the apples-to-apples test of the calibrated profile — and it shows the ~2×
+magnitude over-prediction that the unlocked round could not cleanly separate.
+
+**Actionable for C500:** unchanged, with sharper expectations — a custom MACA-CUTLASS
+fused-epilogue kernel (dual-accumulator for SwiGLU; grouped for the real MoE layer) should
+recover a real but likely-half-of-estimated gain, worth it at the +5–11% configs (small
+hidden/inter, residual epilogues at vendor parity) and marginal at large-h dense FFN dims.

@@ -1,5 +1,96 @@
 # RTX 4060 sim–real fusion gap — worklog
 
+# ROUND 2 — LOCKED-CLOCK RE-RUN (2026-07-22)
+
+The host locked the clocks to **1500 MHz core / 5501 MHz VRAM** (the exact calibration point of
+the `rtx4060-measured` profile) and asked for a full T1–T5 re-run. Per their choice: unlocked
+results archived as `*_unlocked.*`; fresh canonical deliverables from locked-clock runs; the
+writeup's verdict now rests on locked-clock data with a locked-vs-unlocked comparison.
+
+## R2-T1 — environment re-check (locked clocks)
+
+- `nvidia-smi`: gr 1500 MHz / mem 5501 MHz at idle AND rock-solid under 3 s of sustained GEMM
+  load (every 0.2 s sample identical: "1500, 5501"); persistence mode Enabled; 57 °C idle.
+- Quick probe: 4096³ bf16 matmul = 7.627 ms = **18.02 TF/s** at the lock — consistent with the
+  profile's calibration (peak_tensor_flops 18.43 = 96 TC × 128 × 1.5 GHz).
+- Device props unchanged from R1-T1 (24 SM, 8 GiB, cc 8.9, 99 KiB opt-in SMEM, 32 MiB L2);
+  torch 2.11.0+cu130 / triton 3.6.0 / py3.13.
+- Methodology note: `warm_clocks()` stays enabled in `med_time` — a semantic no-op at locked
+  clocks, kept as a guard in case the lock drops mid-run (WSL2); drift probes and ClockSamplers
+  stay too, now serving as lock-held verification.
+
+## R2-T2 — peak specs at locked clocks (2026-07-22)
+
+- **18.25 TF/s (0.990× profile) and 167.9 GB/s (0.988×)** — the `rtx4060-measured` profile
+  reproduces to within ~1.2% at its own calibration point. Implied tensor clock 1485 MHz vs the
+  1500 lock. Adjusted profile ≈ stock (clock 1.485e9, bw 1.679e11) — carried through anyway for
+  consistency. `rtx4060_peak.json`.
+- Contrast unlocked R1: 18.79 TF/s (1.019×) / 214.8 GB/s (1.264×) — the unlocked memory clock
+  was the big deviation.
+
+## R2-T3 — estimator validation at locked clocks (2026-07-22)
+
+- 24 shapes: **geomean est/meas = 0.943 stock / 0.952 adjusted; 96%/100% within 1.5×;
+  100% within 2×; ratios span 0.663–0.991** → IN the 0.72–0.96 band, and the estimator is now
+  *uniformly* mildly optimistic (no ratio > 1 — R1's pessimistic ratios up to 1.15 were
+  boost-clock artifacts). FFN subset: 0.948, 100% within 1.5×.
+- Every R1 flaky shape resolved: 2048×1024×1024 now 0.309 ms / 13.9 TF/s in-sweep (R1: 0.73 ms /
+  5.8 TF/s); achieved TFLOP/s across the sweep is a tight 16.2–18.3 for all non-tiny shapes.
+  DVFS was conclusively the R1 noise source. `rtx4060_gemm_validate.json`,
+  merged → `rtx4060_measured.json`.
+
+## R2-T4 — launched (2026-07-22)
+
+- Same protocol as R1 take 2 (12 configs, all paths, --moe, --t2-json), locked clocks.
+  Log: scratchpad/t4_locked_run.log.
+
+## R2-T4 — results (2026-07-22)
+
+- 12 configs completed at the lock; `rtx4060_fusion.json` (+ `annotations_post_hoc` with
+  residual numerics, late-phase fields, aggregates). Lock held in 11/12 configs (all ClockSampler
+  medians 1500); `residual_glm_M8192` sagged to 1290 MHz median — **power-limit throttling below
+  the lock** (35 W part): `-lgc` caps but cannot floor. Its sibling glm_M2048 drifted 1.13.
+- **All 6 swiglu configs drift-clean** (0.98–1.02): verified gains 1.062/1.024/0.993/1.108/
+  1.088/0.974 vs est 1.158/1.079/1.040/1.159/1.079/1.041. Hand kernel 1.03–1.08× vendor.
+  The R1 throttle-excluded `swiglu_M8192_h2048` now reads **1.088 vs est 1.079** — R1's
+  exclusion vindicated.
+- Residual: clean M2048 config **matches est exactly** (forced-template gain 1.052 vs est 1.053
+  at 1.0005× vendor). M8192: addmm +1.4%, forced template loses parity (1.13×). GLM rows
+  power-dip-tainted (drift 1.13/1.23) — glm_M2048's addmm 0.888 contradicts its own R1 value
+  (1.006), flagged unreliable.
+- **Aggregates**: verified-gain geomean 1.0285 (n=10) / 1.0419 (clean n=7) vs est 1.0692/1.0860
+  → **delivered fraction ≈ 0.41/0.49** — the estimator over-predicts magnitude ~2× at these
+  dims, now cleanly measurable because clocks are locked (stock ≈ adjusted profile: 18.25 TF/s,
+  167.9 GB/s). Direction/ranking correct; C500-convention all-12 geomean now positive (1.061).
+- Hypotheses for the over-prediction (in writeup §4): (i) eliminated activation traffic partly
+  L2-resident at small h (est charges DRAM bw; over-prediction largest at h=1024), (ii) at
+  h=4096 the hand kernel's 1.06–1.08× overhead eats the small (+4%) predicted gain. The exact
+  est-match at the vendor-parity residual config supports (ii).
+
+## R2-T5 — verdict (2026-07-22)
+
+**A upheld on locked-clock data, with the quantitative caveat now front-and-center**: fusion
+gains are real on verified-fused paths (+2.9% geomean n=10, up to +10.8%; fused kernels
+1.00–1.08× vendor — no C500-style tax), but realized magnitude ≈ 0.4–0.5× the estimator's
+prediction. Rewrote `rtx4060_sim_real_results.md` (locked-clock canonical, lock stated
+prominently per host request, §7 locked-vs-unlocked comparison). Unlocked round archived as
+`*_unlocked.*`.
+
+## R2 close-out (2026-07-22)
+
+- Independent number re-audit of the locked-clock writeup vs all four JSONs (+ R1 archives for
+  the §7 comparison): headline numbers all confirmed; 5 slips fixed (MoE +3.0%, drift 1.22,
+  compile beats eager in 1/12 with 1 tie, over-prediction-largest claim restricted to the
+  M2048-h1024 single max, gu range 8–67 MB). Stale `clocks_locked=false` metadata (hardcoded R1
+  note in the scripts) corrected post-run in `rtx4060_fusion.json` and `rtx4060_measured.json`,
+  each with an explicit [corrected post-run] marker.
+- Deliverables (locked-clock canonical): `rtx4060_measured.json`, `rtx4060_fusion.json`,
+  `rtx4060_sim_real_results.md`, this worklog. R1 unlocked archives: `rtx4060_measured_unlocked.json`,
+  `rtx4060_fusion_unlocked.json`, `rtx4060_peak_unlocked.json`, `rtx4060_gemm_validate_unlocked.json`,
+  `rtx4060_sim_real_results_unlocked.md`.
+
+(Round-1 unlocked-clock log follows below.)
+
 Task: `RTX4060_SIM_REAL_TASK.md`. Date: 2026-07-20. Agent: Claude (ultracode mode).
 
 ## T1 — Environment + device discovery (2026-07-20)

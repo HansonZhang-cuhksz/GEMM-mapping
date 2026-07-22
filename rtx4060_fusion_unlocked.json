@@ -27,17 +27,17 @@
   "estimator_profile": "RTX 4060 Laptop (locked 1500/5501, measured)",
   "estimator_peak_tflops": 18.432,
   "estimator_bw_gbps": 170.0,
-  "clocks_locked": true,
-  "clocks_note": "clocks LOCKED 1500 MHz core / 5501 MHz VRAM by host (nvidia-smi -lgc/-lmc) for this run; per-config ClockSampler medians confirm (1500 in 11/12; residual_glm_M8192 at 1290 = power-limit dip below the lock). [field corrected post-run: the script's hardcoded R1 note was stale]",
+  "clocks_locked": false,
+  "clocks_note": "WSL2 / no root: clocks NOT locked -> ClockSampler recorded per config",
   "smoke": false,
   "adjusted_profile": {
    "applied": {
-    "clock_hz": 1485373551.996981,
-    "bw_bytes_per_s": 167942342452.44226
+    "clock_hz": 1529156128.3267167,
+    "bw_bytes_per_s": 214842784962.90384
    },
    "source": "t2 adjusted_profile block",
-   "check_peak_tflops": 18.252270206938903,
-   "check_bw_gbs": 167.94234245244226
+   "check_peak_tflops": 18.790270504878695,
+   "check_bw_gbs": 214.84278496290383
   }
  },
  "configs": [
@@ -49,21 +49,21 @@
     "hidden": 1024,
     "inter": 1024
    },
-   "gemm_only_ms": 0.5498879849910736,
-   "unfused_ms": 0.6225920021533966,
-   "gemm_only_repeat_ms": 0.5402719974517822,
-   "gemm_drift_ratio": 0.9825128247902207,
+   "gemm_only_ms": 0.555519998073578,
+   "unfused_ms": 0.45772799849510193,
+   "gemm_only_repeat_ms": 0.47766399383544916,
+   "gemm_drift_ratio": 0.8598502222996176,
    "eager_rel_max_vs_fp32": 0.015336453914642334,
-   "unfused_compiled_nocg_ms": 0.6100000143051146,
-   "best_unfused_ms": 0.6100000143051146,
+   "unfused_compiled_nocg_ms": 0.5516959726810455,
+   "best_unfused_ms": 0.45772799849510193,
    "fused_paths": {
-    "compiled_ms": 0.6225920021533966,
-    "compiled_forced_triton_ms": 0.5700959861278534,
-    "triton_ms": 0.574447989463806
+    "compiled_ms": 0.5949440002441406,
+    "compiled_forced_triton_ms": 0.532943993806839,
+    "triton_ms": 0.520687997341156
    },
-   "best_fused_ms": 0.5700959861278534,
-   "measured_gain": 1.0920827672934539,
-   "measured_gain_verified": 1.0618890230158053,
+   "best_fused_ms": 0.520687997341156,
+   "measured_gain": 0.879083060935621,
+   "measured_gain_verified": 0.879083060935621,
    "est_unfused_ms": 0.5436917960784313,
    "est_fused_ms": 0.46967466666666663,
    "estimated_gain": 1.157592339261286,
@@ -73,26 +73,26 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 494.413,
-     "avg_us": 494.413
-    },
-    {
-     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
-     "count": 1,
-     "total_us": 21.405,
-     "avg_us": 21.405
+     "total_us": 375.001,
+     "avg_us": 375.001
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 18.94,
-     "avg_us": 18.94
+     "total_us": 19.126,
+     "avg_us": 19.126
+    },
+    {
+     "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+     "count": 1,
+     "total_us": 16.339,
+     "avg_us": 16.339
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.9246,
+    "dominant_frac_of_gpu_time": 0.9136,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -102,20 +102,20 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 495.763,
-     "avg_us": 495.763
+     "total_us": 427.795,
+     "avg_us": 427.795
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 19.183,
-     "avg_us": 19.183
+     "total_us": 21.768,
+     "avg_us": 21.768
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.9627,
+    "dominant_frac_of_gpu_time": 0.9516,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -125,20 +125,20 @@
     {
      "name": "triton_tem_fused_mm_0",
      "count": 1,
-     "total_us": 482.495,
-     "avg_us": 482.495
+     "total_us": 428.221,
+     "avg_us": 428.221
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_1",
      "count": 1,
-     "total_us": 19.104,
-     "avg_us": 19.104
+     "total_us": 17.559,
+     "avg_us": 17.559
     }
    ],
    "forced_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "triton_tem_fused_mm_0",
-    "dominant_frac_of_gpu_time": 0.9619,
+    "dominant_frac_of_gpu_time": 0.9606,
     "triton_gemm_template_present": true,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_1"
@@ -150,48 +150,48 @@
    "nocg_max_abs_diff": 8.0,
    "forced_numerics_ok": true,
    "forced_max_abs_diff": 8.0,
-   "compiled_over_gemm_ratio": 1.1322160497169313,
-   "nocg_over_gemm_ratio": 1.109316862624334,
-   "forced_over_gemm_ratio": 1.0367493047463254,
-   "triton_over_gemm_ratio": 1.044663649948873,
-   "compiled_cudagraph_input_copy_us": 21.405,
+   "compiled_over_gemm_ratio": 1.0709677460888474,
+   "nocg_over_gemm_ratio": 0.9931163137136496,
+   "forced_over_gemm_ratio": 0.9593605912567906,
+   "triton_over_gemm_ratio": 0.9372983855608947,
+   "compiled_cudagraph_input_copy_us": 16.339,
    "triton_info": {
     "numerics_ok": true,
     "rel_max_vs_fp32": 0.0038884361274540424,
     "eager_rel_max_vs_fp32": 0.015336453914642334,
     "rel_tol": 0.05,
     "max_abs_diff_vs_eager": 64.0,
-    "config": "BM128 BN64 BK32 w4 s3 (tuned over 6 candidates)"
+    "config": "BM64 BN64 BK32 w4 s2 (tuned over 6 candidates)"
    },
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1500.0,
-     "max": 1500.0
+     "median": 1725.0,
+     "min": 210.0,
+     "max": 2070.0
     },
     "mem_mhz": {
-     "median": 5501.0,
-     "min": 5501.0,
-     "max": 5501.0
+     "median": 7001.0,
+     "min": 810.0,
+     "max": 7001.0
     },
     "temp_c": {
-     "median": 64.0,
-     "min": 60.0,
-     "max": 67.0
+     "median": 68.0,
+     "min": 64.0,
+     "max": 72.0
     },
     "power_w": {
-     "median": 13.535,
-     "min": 9.69,
-     "max": 23.3
+     "median": 20.83,
+     "min": 9.32,
+     "max": 34.85
     },
-    "n_samples": 34
+    "n_samples": 9
    },
-   "est_unfused_ms_adj": 0.5492235446969669,
-   "est_fused_ms_adj": 0.4742995450894038,
-   "estimated_gain_adj": 1.157967681781015
+   "est_unfused_ms_adj": 0.5192874682834372,
+   "est_fused_ms_adj": 0.46071946935262537,
+   "estimated_gain_adj": 1.1271229084655527
   },
   {
    "name": "swiglu_M2048_h2048",
@@ -201,21 +201,21 @@
     "hidden": 2048,
     "inter": 2048
    },
-   "gemm_only_ms": 1.9507839679718018,
-   "unfused_ms": 2.201056003570557,
-   "gemm_only_repeat_ms": 1.9884639978408813,
-   "gemm_drift_ratio": 1.0193153268058968,
+   "gemm_only_ms": 1.9988799691200259,
+   "unfused_ms": 2.013439893722534,
+   "gemm_only_repeat_ms": 1.7420960068702698,
+   "gemm_drift_ratio": 0.8715360770948137,
    "eager_rel_max_vs_fp32": 0.015834730118513107,
-   "unfused_compiled_nocg_ms": 2.137983918190003,
-   "best_unfused_ms": 2.137983918190003,
+   "unfused_compiled_nocg_ms": 1.9585759639739992,
+   "best_unfused_ms": 1.9585759639739992,
    "fused_paths": {
-    "compiled_ms": 2.3610399961471558,
-    "compiled_forced_triton_ms": 2.089232087135315,
-    "triton_ms": 2.088304042816162
+    "compiled_ms": 2.205295920372009,
+    "compiled_forced_triton_ms": 2.48088002204895,
+    "triton_ms": 1.8730880022048948
    },
-   "best_fused_ms": 2.088304042816162,
-   "measured_gain": 1.0539921191754935,
-   "measured_gain_verified": 1.0237895796566316,
+   "best_fused_ms": 1.8730880022048948,
+   "measured_gain": 1.0749307514395612,
+   "measured_gain_verified": 1.0456401203085348,
    "est_unfused_ms": 2.026732925490196,
    "est_fused_ms": 1.8786986666666665,
    "estimated_gain": 1.078796169630643,
@@ -225,26 +225,26 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 1950.225,
-     "avg_us": 1950.225
+     "total_us": 1680.734,
+     "avg_us": 1680.734
     },
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 1,
-     "total_us": 227.482,
-     "avg_us": 227.482
+     "total_us": 275.222,
+     "avg_us": 275.222
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 153.639,
-     "avg_us": 153.639
+     "total_us": 137.642,
+     "avg_us": 137.642
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.8365,
+    "dominant_frac_of_gpu_time": 0.8028,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -254,20 +254,20 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 1948.975,
-     "avg_us": 1948.975
+     "total_us": 1739.927,
+     "avg_us": 1739.927
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 100.133,
-     "avg_us": 100.133
+     "total_us": 76.698,
+     "avg_us": 76.698
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.9511,
+    "dominant_frac_of_gpu_time": 0.9578,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -277,20 +277,20 @@
     {
      "name": "triton_tem_fused_mm_0",
      "count": 1,
-     "total_us": 1896.604,
-     "avg_us": 1896.604
+     "total_us": 2374.574,
+     "avg_us": 2374.574
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_1",
      "count": 1,
-     "total_us": 102.881,
-     "avg_us": 102.881
+     "total_us": 80.406,
+     "avg_us": 80.406
     }
    ],
    "forced_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "triton_tem_fused_mm_0",
-    "dominant_frac_of_gpu_time": 0.9485,
+    "dominant_frac_of_gpu_time": 0.9672,
     "triton_gemm_template_present": true,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_1"
@@ -302,48 +302,48 @@
    "nocg_max_abs_diff": 8.0,
    "forced_numerics_ok": true,
    "forced_max_abs_diff": 8.0,
-   "compiled_over_gemm_ratio": 1.2103031575566465,
-   "nocg_over_gemm_ratio": 1.0959613946452667,
-   "forced_over_gemm_ratio": 1.070970502852479,
-   "triton_over_gemm_ratio": 1.070494773948413,
-   "compiled_cudagraph_input_copy_us": 227.482,
+   "compiled_over_gemm_ratio": 1.1032658060718143,
+   "nocg_over_gemm_ratio": 0.9798367056708414,
+   "forced_over_gemm_ratio": 1.2411350658244462,
+   "triton_over_gemm_ratio": 0.9370687740842644,
+   "compiled_cudagraph_input_copy_us": 275.222,
    "triton_info": {
     "numerics_ok": true,
     "rel_max_vs_fp32": 0.004011092241853476,
     "eager_rel_max_vs_fp32": 0.015834730118513107,
     "rel_tol": 0.05,
     "max_abs_diff_vs_eager": 128.0,
-    "config": "BM64 BN64 BK32 w4 s2 (tuned over 6 candidates)"
+    "config": "BM64 BN64 BK64 w4 s3 (tuned over 6 candidates)"
    },
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1500.0,
-     "max": 1500.0
+     "median": 1695.0,
+     "min": 405.0,
+     "max": 2070.0
     },
     "mem_mhz": {
      "median": 5501.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 7001.0
     },
     "temp_c": {
-     "median": 65.0,
-     "min": 64.0,
-     "max": 69.0
+     "median": 72.0,
+     "min": 67.0,
+     "max": 74.0
     },
     "power_w": {
-     "median": 15.34,
-     "min": 10.28,
-     "max": 27.71
+     "median": 34.02,
+     "min": 10.36,
+     "max": 36.68
     },
-    "n_samples": 25
+    "n_samples": 9
    },
-   "est_unfused_ms_adj": 2.0470461795727415,
-   "est_fused_ms_adj": 1.8971981803576152,
-   "estimated_gain_adj": 1.0789838408905075
+   "est_unfused_ms_adj": 1.9600138752721252,
+   "est_fused_ms_adj": 1.8428778774105015,
+   "estimated_gain_adj": 1.0635614542327765
   },
   {
    "name": "swiglu_M2048_h4096",
@@ -353,21 +353,21 @@
     "hidden": 4096,
     "inter": 4096
    },
-   "gemm_only_ms": 7.568303823471069,
-   "unfused_ms": 8.20684814453125,
-   "gemm_only_repeat_ms": 7.5761120319366455,
-   "gemm_drift_ratio": 1.0010316986008623,
+   "gemm_only_ms": 7.273967981338501,
+   "unfused_ms": 7.683791875839233,
+   "gemm_only_repeat_ms": 7.285520076751709,
+   "gemm_drift_ratio": 1.0015881421863342,
    "eager_rel_max_vs_fp32": 0.018329396843910217,
-   "unfused_compiled_nocg_ms": 7.930720090866088,
-   "best_unfused_ms": 7.930720090866088,
+   "unfused_compiled_nocg_ms": 7.604608058929443,
+   "best_unfused_ms": 7.604608058929443,
    "fused_paths": {
-    "compiled_ms": 8.89680004119873,
-    "compiled_forced_triton_ms": 7.83302402496338,
-    "triton_ms": 7.986703872680665
+    "compiled_ms": 8.727968215942383,
+    "compiled_forced_triton_ms": 8.532512187957764,
+    "triton_ms": 7.203376054763794
    },
-   "best_fused_ms": 7.83302402496338,
-   "measured_gain": 1.0477241124725922,
-   "measured_gain_verified": 0.9929903771684743,
+   "best_fused_ms": 7.203376054763794,
+   "measured_gain": 1.0666931474107515,
+   "measured_gain_verified": 1.0557005494528227,
    "est_unfused_ms": 7.767172517647059,
    "est_fused_ms": 7.471104,
    "estimated_gain": 1.0396284829721363,
@@ -377,26 +377,26 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 7566.646,
-     "avg_us": 7566.646
+     "total_us": 7962.595,
+     "avg_us": 7962.595
     },
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 2,
-     "total_us": 1059.96,
-     "avg_us": 529.98
+     "total_us": 1207.826,
+     "avg_us": 603.913
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 246.849,
-     "avg_us": 246.849
+     "total_us": 238.693,
+     "avg_us": 238.693
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.8527,
+    "dominant_frac_of_gpu_time": 0.8463,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -406,20 +406,20 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 7569.971,
-     "avg_us": 7569.971
+     "total_us": 7073.66,
+     "avg_us": 7073.66
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 270.215,
-     "avg_us": 270.215
+     "total_us": 251.57,
+     "avg_us": 251.57
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.9655,
+    "dominant_frac_of_gpu_time": 0.9657,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -429,20 +429,20 @@
     {
      "name": "triton_tem_fused_mm_0",
      "count": 1,
-     "total_us": 7573.536,
-     "avg_us": 7573.536
+     "total_us": 7978.749,
+     "avg_us": 7978.749
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_1",
      "count": 1,
-     "total_us": 252.548,
-     "avg_us": 252.548
+     "total_us": 251.357,
+     "avg_us": 251.357
     }
    ],
    "forced_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "triton_tem_fused_mm_0",
-    "dominant_frac_of_gpu_time": 0.9677,
+    "dominant_frac_of_gpu_time": 0.9695,
     "triton_gemm_template_present": true,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_1"
@@ -454,48 +454,48 @@
    "nocg_max_abs_diff": 16.0,
    "forced_numerics_ok": true,
    "forced_max_abs_diff": 16.0,
-   "compiled_over_gemm_ratio": 1.1755342080226332,
-   "nocg_over_gemm_ratio": 1.047886062167732,
-   "forced_over_gemm_ratio": 1.03497748077599,
-   "triton_over_gemm_ratio": 1.055283199375802,
-   "compiled_cudagraph_input_copy_us": 1059.96,
+   "compiled_over_gemm_ratio": 1.199890931378052,
+   "nocg_over_gemm_ratio": 1.045455256118697,
+   "forced_over_gemm_ratio": 1.1730203115889541,
+   "triton_over_gemm_ratio": 0.9902952656987477,
+   "compiled_cudagraph_input_copy_us": 1207.826,
    "triton_info": {
     "numerics_ok": true,
     "rel_max_vs_fp32": 0.018092412501573563,
     "eager_rel_max_vs_fp32": 0.018329396843910217,
     "rel_tol": 0.05,
     "max_abs_diff_vs_eager": 256.0,
-    "config": "BM64 BN128 BK32 w4 s3 (tuned over 6 candidates)"
+    "config": "BM128 BN64 BK32 w4 s3 (tuned over 6 candidates)"
    },
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1275.0,
-     "max": 1500.0
+     "median": 1605.0,
+     "min": 375.0,
+     "max": 2070.0
     },
     "mem_mhz": {
      "median": 5501.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 7001.0
     },
     "temp_c": {
-     "median": 67.0,
-     "min": 65.0,
-     "max": 70.0
+     "median": 74.0,
+     "min": 68.0,
+     "max": 74.0
     },
     "power_w": {
-     "median": 19.77,
-     "min": 12.98,
-     "max": 32.25
+     "median": 33.32,
+     "min": 10.23,
+     "max": 36.33
     },
-    "n_samples": 29
+    "n_samples": 13
    },
-   "est_unfused_ms_adj": 7.84436783194542,
-   "est_fused_ms_adj": 7.544671833515167,
-   "estimated_gain_adj": 1.0397228673484424
+   "est_unfused_ms_adj": 7.562925880309194,
+   "est_fused_ms_adj": 7.328653884585947,
+   "estimated_gain_adj": 1.0319665793217472
   },
   {
    "name": "swiglu_M8192_h1024",
@@ -505,21 +505,21 @@
     "hidden": 1024,
     "inter": 1024
    },
-   "gemm_only_ms": 1.9337599873542786,
-   "unfused_ms": 2.511952042579651,
-   "gemm_only_repeat_ms": 1.9533439874649048,
-   "gemm_drift_ratio": 1.0101274202789874,
+   "gemm_only_ms": 1.968464016914368,
+   "unfused_ms": 2.3641120195388794,
+   "gemm_only_repeat_ms": 1.9956640005111694,
+   "gemm_drift_ratio": 1.01381787188543,
    "eager_rel_max_vs_fp32": 0.016418252140283585,
-   "unfused_compiled_nocg_ms": 2.3076159954071045,
-   "best_unfused_ms": 2.3076159954071045,
+   "unfused_compiled_nocg_ms": 2.1003839969635014,
+   "best_unfused_ms": 2.1003839969635014,
    "fused_paths": {
-    "compiled_ms": 2.4550720453262334,
-    "compiled_forced_triton_ms": 2.285264015197754,
-    "triton_ms": 2.0831199884414673
+    "compiled_ms": 2.327567934989929,
+    "compiled_forced_triton_ms": 3.13702392578125,
+    "triton_ms": 1.9558879733085635
    },
-   "best_fused_ms": 2.0831199884414673,
-   "measured_gain": 1.205860467240307,
-   "measured_gain_verified": 1.107769119499256,
+   "best_fused_ms": 1.9558879733085635,
+   "measured_gain": 1.208715453953003,
+   "measured_gain_verified": 1.0738774539374614,
    "est_unfused_ms": 2.1638445176470587,
    "est_fused_ms": 1.867776,
    "estimated_gain": 1.1585139318885447,
@@ -529,26 +529,26 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 1922.332,
-     "avg_us": 1922.332
+     "total_us": 1707.005,
+     "avg_us": 1707.005
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 299.308,
-     "avg_us": 299.308
+     "total_us": 308.283,
+     "avg_us": 308.283
     },
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 1,
-     "total_us": 218.357,
-     "avg_us": 218.357
+     "total_us": 229.02,
+     "avg_us": 229.02
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.7878,
+    "dominant_frac_of_gpu_time": 0.7606,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -558,20 +558,20 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 1922.976,
-     "avg_us": 1922.976
+     "total_us": 1764.183,
+     "avg_us": 1764.183
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 319.482,
-     "avg_us": 319.482
+     "total_us": 232.201,
+     "avg_us": 232.201
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.8575,
+    "dominant_frac_of_gpu_time": 0.8837,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -581,20 +581,20 @@
     {
      "name": "triton_tem_fused_mm_0",
      "count": 1,
-     "total_us": 1898.14,
-     "avg_us": 1898.14
+     "total_us": 2798.377,
+     "avg_us": 2798.377
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_1",
      "count": 1,
-     "total_us": 279.343,
-     "avg_us": 279.343
+     "total_us": 217.641,
+     "avg_us": 217.641
     }
    ],
    "forced_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "triton_tem_fused_mm_0",
-    "dominant_frac_of_gpu_time": 0.8717,
+    "dominant_frac_of_gpu_time": 0.9278,
     "triton_gemm_template_present": true,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_1"
@@ -606,48 +606,48 @@
    "nocg_max_abs_diff": 8.0,
    "forced_numerics_ok": true,
    "forced_max_abs_diff": 8.0,
-   "compiled_over_gemm_ratio": 1.2695846751308577,
-   "nocg_over_gemm_ratio": 1.193331132352328,
-   "forced_over_gemm_ratio": 1.181772314114532,
-   "triton_over_gemm_ratio": 1.0772381278255423,
-   "compiled_cudagraph_input_copy_us": 218.357,
+   "compiled_over_gemm_ratio": 1.182428489924072,
+   "nocg_over_gemm_ratio": 1.0670167089241094,
+   "forced_over_gemm_ratio": 1.5936404723814246,
+   "triton_over_gemm_ratio": 0.9936112402879897,
+   "compiled_cudagraph_input_copy_us": 229.02,
    "triton_info": {
     "numerics_ok": true,
     "rel_max_vs_fp32": 0.0038884440436959267,
     "eager_rel_max_vs_fp32": 0.016418252140283585,
     "rel_tol": 0.05,
     "max_abs_diff_vs_eager": 64.0,
-    "config": "BM64 BN128 BK32 w4 s3 (tuned over 6 candidates)"
+    "config": "BM128 BN64 BK32 w4 s3 (tuned over 6 candidates)"
    },
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1425.0,
-     "max": 1500.0
+     "median": 1530.0,
+     "min": 360.0,
+     "max": 2070.0
     },
     "mem_mhz": {
-     "median": 5501.0,
+     "median": 7001.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 7001.0
     },
     "temp_c": {
-     "median": 67.0,
-     "min": 66.0,
-     "max": 70.0
+     "median": 74.0,
+     "min": 70.0,
+     "max": 74.0
     },
     "power_w": {
-     "median": 16.03,
-     "min": 10.2,
-     "max": 31.26
+     "median": 31.8,
+     "min": 10.69,
+     "max": 36.28
     },
-    "n_samples": 25
+    "n_samples": 9
    },
-   "est_unfused_ms_adj": 2.185863956809044,
-   "est_fused_ms_adj": 1.8861679583787918,
-   "estimated_gain_adj": 1.1588914693937693
+   "est_unfused_ms_adj": 2.0664354668697342,
+   "est_fused_ms_adj": 1.8321634711464867,
+   "estimated_gain_adj": 1.127866317286989
   },
   {
    "name": "swiglu_M8192_h2048",
@@ -657,21 +657,21 @@
     "hidden": 2048,
     "inter": 2048
    },
-   "gemm_only_ms": 7.669375896453857,
-   "unfused_ms": 8.82703971862793,
-   "gemm_only_repeat_ms": 7.605871915817261,
-   "gemm_drift_ratio": 0.9917197981303851,
+   "gemm_only_ms": 6.956480026245117,
+   "unfused_ms": 8.312352180480959,
+   "gemm_only_repeat_ms": 9.358288288116455,
+   "gemm_drift_ratio": 1.34526200791347,
    "eager_rel_max_vs_fp32": 0.01771337352693081,
-   "unfused_compiled_nocg_ms": 8.627968311309814,
-   "best_unfused_ms": 8.627968311309814,
+   "unfused_compiled_nocg_ms": 8.376912117004395,
+   "best_unfused_ms": 8.312352180480959,
    "fused_paths": {
-    "compiled_ms": 9.183135986328125,
-    "compiled_forced_triton_ms": 8.261648178100586,
-    "triton_ms": 7.932975769042968
+    "compiled_ms": 8.188464164733885,
+    "compiled_forced_triton_ms": 9.152368068695068,
+    "triton_ms": 9.411808013916016
    },
-   "best_fused_ms": 7.932975769042968,
-   "measured_gain": 1.1127022161184317,
-   "measured_gain_verified": 1.0876080505601609,
+   "best_fused_ms": 8.188464164733885,
+   "measured_gain": 1.015129579033958,
+   "measured_gain_verified": 0.8831833552268136,
    "est_unfused_ms": 8.063241035294118,
    "est_fused_ms": 7.471104,
    "estimated_gain": 1.0792569659442723,
@@ -681,26 +681,26 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 7599.477,
-     "avg_us": 7599.477
+     "total_us": 7167.631,
+     "avg_us": 7167.631
     },
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 2,
-     "total_us": 672.401,
-     "avg_us": 336.2
+     "total_us": 497.887,
+     "avg_us": 248.943
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 610.497,
-     "avg_us": 610.497
+     "total_us": 482.112,
+     "avg_us": 482.112
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.8556,
+    "dominant_frac_of_gpu_time": 0.8797,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -710,20 +710,20 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 7609.423,
-     "avg_us": 7609.423
+     "total_us": 7833.742,
+     "avg_us": 7833.742
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 573.033,
-     "avg_us": 573.033
+     "total_us": 531.048,
+     "avg_us": 531.048
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.93,
+    "dominant_frac_of_gpu_time": 0.9365,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -733,20 +733,20 @@
     {
      "name": "triton_tem_fused_mm_0",
      "count": 1,
-     "total_us": 7516.6,
-     "avg_us": 7516.6
+     "total_us": 8487.162,
+     "avg_us": 8487.162
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_1",
      "count": 1,
-     "total_us": 591.921,
-     "avg_us": 591.921
+     "total_us": 566.745,
+     "avg_us": 566.745
     }
    ],
    "forced_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "triton_tem_fused_mm_0",
-    "dominant_frac_of_gpu_time": 0.927,
+    "dominant_frac_of_gpu_time": 0.9374,
     "triton_gemm_template_present": true,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_1"
@@ -758,11 +758,11 @@
    "nocg_max_abs_diff": 16.0,
    "forced_numerics_ok": true,
    "forced_max_abs_diff": 16.0,
-   "compiled_over_gemm_ratio": 1.1973772195171963,
-   "nocg_over_gemm_ratio": 1.1249896246836966,
-   "forced_over_gemm_ratio": 1.0772256164834197,
-   "triton_over_gemm_ratio": 1.034370446324191,
-   "compiled_cudagraph_input_copy_us": 672.401,
+   "compiled_over_gemm_ratio": 1.1770987818323044,
+   "nocg_over_gemm_ratio": 1.204188337406322,
+   "forced_over_gemm_ratio": 1.315660798876069,
+   "triton_over_gemm_ratio": 1.3529555146291716,
+   "compiled_cudagraph_input_copy_us": 497.887,
    "triton_info": {
     "numerics_ok": true,
     "rel_max_vs_fp32": 0.004674677737057209,
@@ -776,30 +776,30 @@
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1500.0,
-     "max": 1500.0
+     "median": 1455.0,
+     "min": 330.0,
+     "max": 1935.0
     },
     "mem_mhz": {
-     "median": 5501.0,
+     "median": 7001.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 7001.0
     },
     "temp_c": {
-     "median": 68.0,
-     "min": 66.0,
-     "max": 71.0
+     "median": 74.0,
+     "min": 70.0,
+     "max": 74.0
     },
     "power_w": {
-     "median": 18.41,
-     "min": 11.26,
-     "max": 30.49
+     "median": 30.81,
+     "min": 10.3,
+     "max": 36.73
     },
-    "n_samples": 30
+    "n_samples": 13
    },
-   "est_unfused_ms_adj": 8.144063830375671,
-   "est_fused_ms_adj": 7.544671833515167,
-   "estimated_gain_adj": 1.0794457346968847
+   "est_unfused_ms_adj": 7.797197876032443,
+   "est_fused_ms_adj": 7.328653884585947,
+   "estimated_gain_adj": 1.0639331586434946
   },
   {
    "name": "swiglu_M8192_h4096",
@@ -809,21 +809,21 @@
     "hidden": 4096,
     "inter": 4096
    },
-   "gemm_only_ms": 30.12016010284424,
-   "unfused_ms": 32.44140815734863,
-   "gemm_only_repeat_ms": 30.217727661132816,
-   "gemm_drift_ratio": 1.003239277545519,
+   "gemm_only_ms": 32.12318420410156,
+   "unfused_ms": 34.54308891296387,
+   "gemm_only_repeat_ms": 39.645792007446296,
+   "gemm_drift_ratio": 1.2341800163877972,
    "eager_rel_max_vs_fp32": 0.021990027278661728,
-   "unfused_compiled_nocg_ms": 31.60296058654785,
-   "best_unfused_ms": 31.60296058654785,
+   "unfused_compiled_nocg_ms": 38.997055053710945,
+   "best_unfused_ms": 34.54308891296387,
    "fused_paths": {
-    "compiled_ms": 33.250192642211914,
-    "compiled_forced_triton_ms": 31.489168167114258,
-    "triton_ms": 32.442192077636726
+    "compiled_ms": 42.12212944030762,
+    "compiled_forced_triton_ms": 41.243728637695305,
+    "triton_ms": 41.49528121948243
    },
-   "best_fused_ms": 31.489168167114258,
-   "measured_gain": 1.0302402396017831,
-   "measured_gain_verified": 0.9741314801083563,
+   "best_fused_ms": 41.243728637695305,
+   "measured_gain": 0.8375355491354074,
+   "measured_gain_verified": 0.8324582433904691,
    "est_unfused_ms": 31.068690070588236,
    "est_fused_ms": 29.84072533333333,
    "estimated_gain": 1.0411506330204117,
@@ -833,26 +833,26 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 31664.839,
-     "avg_us": 31664.839
+     "total_us": 33384.793,
+     "avg_us": 33384.793
     },
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 4,
-     "total_us": 1771.526,
-     "avg_us": 442.881
+     "total_us": 1392.753,
+     "avg_us": 348.188
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 1285.163,
-     "avg_us": 1285.163
+     "total_us": 1065.403,
+     "avg_us": 1065.403
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.912,
+    "dominant_frac_of_gpu_time": 0.9314,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -862,20 +862,20 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 30056.617,
-     "avg_us": 30056.617
+     "total_us": 37198.504,
+     "avg_us": 37198.504
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 1254.53,
-     "avg_us": 1254.53
+     "total_us": 1146.586,
+     "avg_us": 1146.586
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.9599,
+    "dominant_frac_of_gpu_time": 0.9701,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -885,20 +885,20 @@
     {
      "name": "triton_tem_fused_mm_0",
      "count": 1,
-     "total_us": 31256.328,
-     "avg_us": 31256.328
+     "total_us": 40055.621,
+     "avg_us": 40055.621
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_1",
      "count": 1,
-     "total_us": 1214.158,
-     "avg_us": 1214.158
+     "total_us": 894.229,
+     "avg_us": 894.229
     }
    ],
    "forced_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "triton_tem_fused_mm_0",
-    "dominant_frac_of_gpu_time": 0.9626,
+    "dominant_frac_of_gpu_time": 0.9782,
     "triton_gemm_template_present": true,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_1"
@@ -910,11 +910,11 @@
    "nocg_max_abs_diff": 16.0,
    "forced_numerics_ok": true,
    "forced_max_abs_diff": 16.0,
-   "compiled_over_gemm_ratio": 1.103918190629807,
-   "nocg_over_gemm_ratio": 1.0492295020557874,
-   "forced_over_gemm_ratio": 1.045451553364776,
-   "triton_over_gemm_ratio": 1.0770922852622293,
-   "compiled_cudagraph_input_copy_us": 1771.526,
+   "compiled_over_gemm_ratio": 1.3112688073721337,
+   "nocg_over_gemm_ratio": 1.2139847284732037,
+   "forced_over_gemm_ratio": 1.2839240461233357,
+   "triton_over_gemm_ratio": 1.2917549193079128,
+   "compiled_cudagraph_input_copy_us": 1392.753,
    "triton_info": {
     "numerics_ok": true,
     "rel_max_vs_fp32": 0.021990027278661728,
@@ -928,30 +928,30 @@
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1215.0,
-     "max": 1500.0
+     "median": 1140.0,
+     "min": 360.0,
+     "max": 2070.0
     },
     "mem_mhz": {
-     "median": 5501.0,
+     "median": 6251.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 8001.0
     },
     "temp_c": {
-     "median": 71.0,
-     "min": 67.0,
-     "max": 73.0
+     "median": 74.0,
+     "min": 70.0,
+     "max": 75.0
     },
     "power_w": {
-     "median": 28.925,
-     "min": 10.89,
-     "max": 35.03
+     "median": 28.29,
+     "min": 10.74,
+     "max": 34.38
     },
-    "n_samples": 50
+    "n_samples": 52
    },
-   "est_unfused_ms_adj": 31.37747132778168,
-   "est_fused_ms_adj": 30.134566446145374,
-   "estimated_gain_adj": 1.0412451555876057
+   "est_unfused_ms_adj": 30.251703521236777,
+   "est_fused_ms_adj": 29.27175791328773,
+   "estimated_gain_adj": 1.0334775113558932
   },
   {
    "name": "residual_M2048",
@@ -961,20 +961,20 @@
     "n": 16384,
     "k": 6144
    },
-   "gemm_only_ms": 22.772607803344723,
-   "unfused_ms": 23.96846485137939,
-   "gemm_only_repeat_ms": 22.815648078918457,
-   "gemm_drift_ratio": 1.0018900020562165,
-   "best_unfused_ms": 23.96846485137939,
+   "gemm_only_ms": 26.36569595336914,
+   "unfused_ms": 30.87504005432129,
+   "gemm_only_repeat_ms": 29.943168640136722,
+   "gemm_drift_ratio": 1.1356866396811511,
+   "best_unfused_ms": 30.87504005432129,
    "fused_paths": {
-    "addmm_ms": 23.473391532897953,
-    "compiled_ms": 27.725760459899902,
-    "compiled_nocg_ms": 23.66476821899414,
-    "compiled_forced_triton_ms": 22.782976150512695
+    "addmm_ms": 30.50835132598877,
+    "compiled_ms": 33.85444641113282,
+    "compiled_nocg_ms": 30.660767555236816,
+    "compiled_forced_triton_ms": 29.809184074401855
    },
-   "best_fused_ms": 22.782976150512695,
-   "measured_gain": 1.0520339701466095,
-   "measured_gain_verified": 1.0520339701466095,
+   "best_fused_ms": 29.809184074401855,
+   "measured_gain": 1.0357559595478738,
+   "measured_gain_verified": 1.0357559595478738,
    "est_unfused_ms": 23.597586070588235,
    "est_fused_ms": 22.413312,
    "estimated_gain": 1.0528379772961816,
@@ -985,14 +985,14 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 22672.149,
-     "avg_us": 22672.149
+     "total_us": 29824.388,
+     "avg_us": 29824.388
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 710.431,
-     "avg_us": 710.431
+     "total_us": 567.777,
+     "avg_us": 567.777
     }
    ],
    "addmm_separate_kernels": [],
@@ -1000,26 +1000,26 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 22670.85,
-     "avg_us": 22670.85
+     "total_us": 29825.716,
+     "avg_us": 29825.716
     },
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 7,
-     "total_us": 3964.005,
-     "avg_us": 566.286
+     "total_us": 3115.476,
+     "avg_us": 445.068
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 865.47,
-     "avg_us": 865.47
+     "total_us": 675.639,
+     "avg_us": 675.639
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.8244,
+    "dominant_frac_of_gpu_time": 0.8872,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [],
     "vendor_fused_ok": true,
@@ -1029,20 +1029,20 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 22680.231,
-     "avg_us": 22680.231
+     "total_us": 29828.626,
+     "avg_us": 29828.626
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 742.044,
-     "avg_us": 742.044
+     "total_us": 571.942,
+     "avg_us": 571.942
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.9683,
+    "dominant_frac_of_gpu_time": 0.9812,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [],
     "vendor_fused_ok": true,
@@ -1052,8 +1052,8 @@
     {
      "name": "triton_tem_fused_addmm_0",
      "count": 1,
-     "total_us": 22584.83,
-     "avg_us": 22584.83
+     "total_us": 29757.615,
+     "avg_us": 29757.615
     }
    ],
    "forced_fusion_evidence": {
@@ -1073,40 +1073,40 @@
    "forced_max_abs_diff": 2.0,
    "addmm_numerics_ok": false,
    "addmm_max_abs_diff": 2.0,
-   "compiled_over_gemm_ratio": 1.2175048505348467,
-   "nocg_over_gemm_ratio": 1.039176910407177,
-   "forced_over_gemm_ratio": 1.0004552990705988,
-   "addmm_over_gemm_ratio": 1.0307730996645146,
-   "compiled_cudagraph_input_copy_us": 3964.005,
+   "compiled_over_gemm_ratio": 1.2840338624479484,
+   "nocg_over_gemm_ratio": 1.1629037826069155,
+   "forced_over_gemm_ratio": 1.1306048634984993,
+   "addmm_over_gemm_ratio": 1.1571229289735574,
+   "compiled_cudagraph_input_copy_us": 3115.476,
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1395.0,
-     "max": 1500.0
+     "median": 1140.0,
+     "min": 330.0,
+     "max": 2070.0
     },
     "mem_mhz": {
-     "median": 5501.0,
+     "median": 7001.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 8001.0
     },
     "temp_c": {
-     "median": 72.0,
-     "min": 68.0,
-     "max": 73.0
+     "median": 74.0,
+     "min": 72.0,
+     "max": 76.0
     },
     "power_w": {
-     "median": 26.21,
-     "min": 11.37,
-     "max": 34.53
+     "median": 27.15,
+     "min": 10.69,
+     "max": 33.49
     },
-    "n_samples": 35
+    "n_samples": 39
    },
-   "est_unfused_ms_adj": 23.83279949426651,
-   "est_fused_ms_adj": 22.634015500545505,
-   "estimated_gain_adj": 1.0529638231312564
+   "est_unfused_ms_adj": 22.923049636650834,
+   "est_fused_ms_adj": 21.985961653757844,
+   "estimated_gain_adj": 1.0426221057623297
   },
   {
    "name": "residual_M8192",
@@ -1116,20 +1116,20 @@
     "n": 16384,
     "k": 6144
    },
-   "gemm_only_ms": 90.83345413208008,
-   "unfused_ms": 96.13998413085938,
-   "gemm_only_repeat_ms": 96.2089614868164,
-   "gemm_drift_ratio": 1.0591798187804227,
-   "best_unfused_ms": 96.13998413085938,
+   "gemm_only_ms": 119.56811141967775,
+   "unfused_ms": 123.6671371459961,
+   "gemm_only_repeat_ms": 119.49753570556639,
+   "gemm_drift_ratio": 0.9994097446779632,
+   "best_unfused_ms": 123.6671371459961,
    "fused_paths": {
-    "addmm_ms": 94.8073616027832,
-    "compiled_ms": 102.89595413208008,
-    "compiled_nocg_ms": 95.12287902832031,
-    "compiled_forced_triton_ms": 102.9608497619629
+    "addmm_ms": 122.64777755737305,
+    "compiled_ms": 128.99681854248047,
+    "compiled_nocg_ms": 123.59233474731445,
+    "compiled_forced_triton_ms": 119.52449417114258
    },
-   "best_fused_ms": 94.8073616027832,
-   "measured_gain": 1.0140561081496973,
-   "measured_gain_verified": 1.0140561081496973,
+   "best_fused_ms": 119.52449417114258,
+   "measured_gain": 1.0346593642046442,
+   "measured_gain_verified": 1.0346593642046442,
    "est_unfused_ms": 94.25927228235294,
    "est_fused_ms": 89.522176,
    "estimated_gain": 1.0529153389027646,
@@ -1140,14 +1140,14 @@
     {
      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8::Params)",
      "count": 1,
-     "total_us": 92840.967,
-     "avg_us": 92840.967
+     "total_us": 120661.737,
+     "avg_us": 120661.737
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 3457.043,
-     "avg_us": 3457.043
+     "total_us": 2617.081,
+     "avg_us": 2617.081
     }
    ],
    "addmm_separate_kernels": [],
@@ -1155,26 +1155,26 @@
     {
      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8::Params)",
      "count": 1,
-     "total_us": 92897.307,
-     "avg_us": 92897.307
+     "total_us": 119791.557,
+     "avg_us": 119791.557
     },
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 14,
-     "total_us": 7655.329,
-     "avg_us": 546.809
+     "total_us": 5982.082,
+     "avg_us": 427.292
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 3552.934,
-     "avg_us": 3552.934
+     "total_us": 2721.811,
+     "avg_us": 2721.811
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8::Params)",
-    "dominant_frac_of_gpu_time": 0.8923,
+    "dominant_frac_of_gpu_time": 0.9323,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [],
     "vendor_fused_ok": true,
@@ -1184,20 +1184,20 @@
     {
      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8::Params)",
      "count": 1,
-     "total_us": 91228.562,
-     "avg_us": 91228.562
+     "total_us": 119879.707,
+     "avg_us": 119879.707
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 3576.822,
-     "avg_us": 3576.822
+     "total_us": 3398.301,
+     "avg_us": 3398.301
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_256x128_32x3_nn_align8::Params)",
-    "dominant_frac_of_gpu_time": 0.9623,
+    "dominant_frac_of_gpu_time": 0.9724,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [],
     "vendor_fused_ok": true,
@@ -1207,8 +1207,8 @@
     {
      "name": "triton_tem_fused_addmm_0",
      "count": 1,
-     "total_us": 99996.425,
-     "avg_us": 99996.425
+     "total_us": 119103.402,
+     "avg_us": 119103.402
     }
    ],
    "forced_fusion_evidence": {
@@ -1228,40 +1228,40 @@
    "forced_max_abs_diff": 2.0,
    "addmm_numerics_ok": false,
    "addmm_max_abs_diff": 2.0,
-   "compiled_over_gemm_ratio": 1.1327979885303054,
-   "nocg_over_gemm_ratio": 1.0472229635790689,
-   "forced_over_gemm_ratio": 1.1335124348816294,
-   "addmm_over_gemm_ratio": 1.0437493818623775,
-   "compiled_cudagraph_input_copy_us": 7655.329,
+   "compiled_over_gemm_ratio": 1.0788563690674051,
+   "nocg_over_gemm_ratio": 1.033656325920478,
+   "forced_over_gemm_ratio": 0.9996352100236653,
+   "addmm_over_gemm_ratio": 1.0257565842692442,
+   "compiled_cudagraph_input_copy_us": 5982.082,
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1110.0,
-     "max": 1500.0
+     "median": 1140.0,
+     "min": 255.0,
+     "max": 2070.0
     },
     "mem_mhz": {
-     "median": 5501.0,
+     "median": 7001.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 8001.0
     },
     "temp_c": {
-     "median": 73.0,
-     "min": 68.0,
-     "max": 74.0
+     "median": 75.0,
+     "min": 72.0,
+     "max": 76.0
     },
     "power_w": {
-     "median": 28.07,
-     "min": 11.4,
-     "max": 35.56
+     "median": 24.515,
+     "min": 10.8,
+     "max": 37.09
     },
-    "n_samples": 99
+    "n_samples": 118
    },
-   "est_unfused_ms_adj": 95.19883531332016,
-   "est_fused_ms_adj": 90.40369933843613,
-   "estimated_gain_adj": 1.0530413689923563
+   "est_unfused_ms_adj": 91.56362567143515,
+   "est_fused_ms_adj": 87.8152737398632,
+   "estimated_gain_adj": 1.04268451001674
   },
   {
    "name": "residual_glm_M2048",
@@ -1271,20 +1271,20 @@
     "n": 6144,
     "k": 16384
    },
-   "gemm_only_ms": 22.658511161804203,
-   "unfused_ms": 23.031776428222656,
-   "gemm_only_repeat_ms": 25.604415893554688,
-   "gemm_drift_ratio": 1.1300131641798443,
-   "best_unfused_ms": 23.031776428222656,
+   "gemm_only_ms": 29.771648406982425,
+   "unfused_ms": 30.095759391784668,
+   "gemm_only_repeat_ms": 29.788192749023438,
+   "gemm_drift_ratio": 1.0005557079613077,
+   "best_unfused_ms": 30.095759391784668,
    "fused_paths": {
-    "addmm_ms": 25.930416107177734,
-    "compiled_ms": 27.128368377685547,
-    "compiled_nocg_ms": 24.49343967437744,
-    "compiled_forced_triton_ms": 23.562047958374023
+    "addmm_ms": 29.920672416687015,
+    "compiled_ms": 33.098302841186516,
+    "compiled_nocg_ms": 30.11014461517334,
+    "compiled_forced_triton_ms": 29.95255947113037
    },
-   "best_fused_ms": 23.562047958374023,
-   "measured_gain": 0.9774946757137506,
-   "measured_gain_verified": 0.9774946757137506,
+   "best_fused_ms": 29.920672416687015,
+   "measured_gain": 1.005851705892813,
+   "measured_gain_verified": 1.005851705892813,
    "est_unfused_ms": 22.81372410980392,
    "est_fused_ms": 22.36962133333333,
    "estimated_gain": 1.0198529411764707,
@@ -1295,20 +1295,20 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 25143.604,
-     "avg_us": 25143.604
+     "total_us": 29652.838,
+     "avg_us": 29652.838
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 240.892,
-     "avg_us": 240.892
+     "total_us": 153.273,
+     "avg_us": 153.273
     },
     {
      "name": "Memset (Device)",
      "count": 1,
-     "total_us": 1.088,
-     "avg_us": 1.088
+     "total_us": 1.249,
+     "avg_us": 1.249
     }
    ],
    "addmm_separate_kernels": [],
@@ -1316,32 +1316,32 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 27111.39,
-     "avg_us": 27111.39
+     "total_us": 29661.612,
+     "avg_us": 29661.612
     },
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 7,
-     "total_us": 4002.715,
-     "avg_us": 571.816
+     "total_us": 2587.998,
+     "avg_us": 369.714
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 296.116,
-     "avg_us": 296.116
+     "total_us": 279.292,
+     "avg_us": 279.292
     },
     {
      "name": "Memset (Device)",
      "count": 1,
-     "total_us": 1.857,
-     "avg_us": 1.857
+     "total_us": 1.825,
+     "avg_us": 1.825
     }
    ],
    "fusion_evidence": {
     "n_kernels": 4,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.8631,
+    "dominant_frac_of_gpu_time": 0.9118,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [],
     "vendor_fused_ok": true,
@@ -1351,26 +1351,26 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 23799.673,
-     "avg_us": 23799.673
+     "total_us": 29662.038,
+     "avg_us": 29662.038
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 239.135,
-     "avg_us": 239.135
+     "total_us": 177.87,
+     "avg_us": 177.87
     },
     {
      "name": "Memset (Device)",
      "count": 1,
-     "total_us": 1.729,
-     "avg_us": 1.729
+     "total_us": 2.433,
+     "avg_us": 2.433
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.99,
+    "dominant_frac_of_gpu_time": 0.994,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [],
     "vendor_fused_ok": true,
@@ -1380,8 +1380,8 @@
     {
      "name": "triton_tem_fused_addmm_0",
      "count": 1,
-     "total_us": 24452.357,
-     "avg_us": 24452.357
+     "total_us": 29699.976,
+     "avg_us": 29699.976
     }
    ],
    "forced_fusion_evidence": {
@@ -1401,40 +1401,40 @@
    "forced_max_abs_diff": 4.0,
    "addmm_numerics_ok": false,
    "addmm_max_abs_diff": 4.0,
-   "compiled_over_gemm_ratio": 1.197270561333979,
-   "nocg_over_gemm_ratio": 1.080981865907695,
-   "forced_over_gemm_ratio": 1.0398762650430857,
-   "addmm_over_gemm_ratio": 1.1444007032063532,
-   "compiled_cudagraph_input_copy_us": 4002.715,
+   "compiled_over_gemm_ratio": 1.1117390071496305,
+   "nocg_over_gemm_ratio": 1.0113697502927492,
+   "forced_over_gemm_ratio": 1.0060766223514017,
+   "addmm_over_gemm_ratio": 1.0050055679708227,
+   "compiled_cudagraph_input_copy_us": 2587.998,
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1215.0,
-     "max": 1500.0
+     "median": 1140.0,
+     "min": 270.0,
+     "max": 2070.0
     },
     "mem_mhz": {
-     "median": 5501.0,
-     "min": 5501.0,
-     "max": 5501.0
+     "median": 7001.0,
+     "min": 810.0,
+     "max": 8001.0
     },
     "temp_c": {
-     "median": 73.0,
-     "min": 70.0,
-     "max": 74.0
+     "median": 75.0,
+     "min": 72.0,
+     "max": 77.0
     },
     "power_w": {
-     "median": 25.46,
-     "min": 11.63,
-     "max": 34.69
+     "median": 27.59,
+     "min": 11.3,
+     "max": 37.04
     },
-    "n_samples": 35
+    "n_samples": 39
    },
-   "est_unfused_ms_adj": 23.03943861027559,
-   "est_fused_ms_adj": 22.58989461263021,
-   "estimated_gain_adj": 1.019900225536866
+   "est_unfused_ms_adj": 22.294512022286657,
+   "est_fused_ms_adj": 21.943104028701786,
+   "estimated_gain_adj": 1.0160145070234925
   },
   {
    "name": "residual_glm_M8192",
@@ -1444,20 +1444,20 @@
     "n": 6144,
     "k": 16384
    },
-   "gemm_only_ms": 97.03244781494142,
-   "unfused_ms": 104.62390518188478,
-   "gemm_only_repeat_ms": 118.83272171020508,
-   "gemm_drift_ratio": 1.2246699365643208,
-   "best_unfused_ms": 104.62390518188478,
+   "gemm_only_ms": 118.89649581909178,
+   "unfused_ms": 120.90358352661133,
+   "gemm_only_repeat_ms": 118.80369567871094,
+   "gemm_drift_ratio": 0.9992194880114714,
+   "best_unfused_ms": 120.90358352661133,
    "fused_paths": {
-    "addmm_ms": 104.33118438720703,
-    "compiled_ms": 125.86103820800781,
-    "compiled_nocg_ms": 115.12456130981445,
-    "compiled_forced_triton_ms": 105.93447875976562
+    "addmm_ms": 120.05039978027344,
+    "compiled_ms": 128.1417236328125,
+    "compiled_nocg_ms": 120.327823638916,
+    "compiled_forced_triton_ms": 119.07627487182617
    },
-   "best_fused_ms": 104.33118438720703,
-   "measured_gain": 1.002805688408476,
-   "measured_gain_verified": 1.002805688408476,
+   "best_fused_ms": 119.07627487182617,
+   "measured_gain": 1.0153456988535463,
+   "measured_gain_verified": 1.0153456988535463,
    "est_unfused_ms": 91.25489643921568,
    "est_fused_ms": 89.47848533333332,
    "estimated_gain": 1.0198529411764707,
@@ -1468,20 +1468,20 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 92382.007,
-     "avg_us": 92382.007
+     "total_us": 119021.911,
+     "avg_us": 119021.911
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 1280.106,
-     "avg_us": 1280.106
+     "total_us": 1382.109,
+     "avg_us": 1382.109
     },
     {
      "name": "Memset (Device)",
      "count": 1,
-     "total_us": 2.497,
-     "avg_us": 2.497
+     "total_us": 3.2,
+     "avg_us": 3.2
     }
    ],
    "addmm_separate_kernels": [],
@@ -1489,32 +1489,32 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 109659.761,
-     "avg_us": 109659.761
+     "total_us": 120521.09,
+     "avg_us": 120521.09
     },
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 14,
-     "total_us": 7589.843,
-     "avg_us": 542.132
+     "total_us": 7653.357,
+     "avg_us": 546.668
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 1274.49,
-     "avg_us": 1274.49
+     "total_us": 1309.746,
+     "avg_us": 1309.746
     },
     {
      "name": "Memset (Device)",
      "count": 1,
-     "total_us": 1.985,
-     "avg_us": 1.985
+     "total_us": 2.143,
+     "avg_us": 2.143
     }
    ],
    "fusion_evidence": {
     "n_kernels": 4,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.9252,
+    "dominant_frac_of_gpu_time": 0.9308,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [],
     "vendor_fused_ok": true,
@@ -1524,26 +1524,26 @@
     {
      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
      "count": 1,
-     "total_us": 110251.99,
-     "avg_us": 110251.99
+     "total_us": 118587.907,
+     "avg_us": 118587.907
     },
     {
      "name": "Memcpy DtoD (Device -> Device)",
      "count": 1,
-     "total_us": 1197.628,
-     "avg_us": 1197.628
+     "total_us": 1204.094,
+     "avg_us": 1204.094
     },
     {
      "name": "Memset (Device)",
      "count": 1,
-     "total_us": 2.848,
-     "avg_us": 2.848
+     "total_us": 3.712,
+     "avg_us": 3.712
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
-    "dominant_frac_of_gpu_time": 0.9892,
+    "dominant_frac_of_gpu_time": 0.9899,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [],
     "vendor_fused_ok": true,
@@ -1553,8 +1553,8 @@
     {
      "name": "triton_tem_fused_addmm_0",
      "count": 1,
-     "total_us": 105211.79,
-     "avg_us": 105211.79
+     "total_us": 120605.268,
+     "avg_us": 120605.268
     }
    ],
    "forced_fusion_evidence": {
@@ -1574,40 +1574,40 @@
    "forced_max_abs_diff": 6.0,
    "addmm_numerics_ok": false,
    "addmm_max_abs_diff": 4.0,
-   "compiled_over_gemm_ratio": 1.2971025779752334,
-   "nocg_over_gemm_ratio": 1.1864542624893684,
-   "forced_over_gemm_ratio": 1.0917428256762316,
-   "addmm_over_gemm_ratio": 1.0752195449730964,
-   "compiled_cudagraph_input_copy_us": 7589.843,
+   "compiled_over_gemm_ratio": 1.0777586231623504,
+   "nocg_over_gemm_ratio": 1.012038435699586,
+   "forced_over_gemm_ratio": 1.001512063509491,
+   "addmm_over_gemm_ratio": 1.0097051132855706,
+   "compiled_cudagraph_input_copy_us": 7653.357,
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1290.0,
-     "min": 1140.0,
-     "max": 1500.0
+     "median": 1140.0,
+     "min": 315.0,
+     "max": 1905.0
     },
     "mem_mhz": {
      "median": 5501.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 8001.0
     },
     "temp_c": {
-     "median": 74.0,
-     "min": 70.0,
-     "max": 75.0
+     "median": 76.0,
+     "min": 72.0,
+     "max": 77.0
     },
     "power_w": {
-     "median": 28.07,
-     "min": 10.78,
-     "max": 35.59
+     "median": 26.12,
+     "min": 10.72,
+     "max": 35.65
     },
-    "n_samples": 107
+    "n_samples": 117
    },
-   "est_unfused_ms_adj": 92.15775444110236,
-   "est_fused_ms_adj": 90.35957845052084,
-   "estimated_gain_adj": 1.019900225536866
+   "est_unfused_ms_adj": 89.17804808914663,
+   "est_fused_ms_adj": 87.77241611480714,
+   "estimated_gain_adj": 1.0160145070234925
   },
   {
    "name": "moe_E8",
@@ -1618,19 +1618,19 @@
     "hidden": 2048,
     "inter": 2048
    },
-   "gemm_only_ms": 1.0871360301971436,
-   "unfused_ms": 1.1632640361785889,
-   "gemm_only_repeat_ms": 1.0137919783592224,
-   "gemm_drift_ratio": 0.9325346140679186,
+   "gemm_only_ms": 1.198352038860321,
+   "unfused_ms": 1.4522879719734194,
+   "gemm_only_repeat_ms": 1.3076960444450378,
+   "gemm_drift_ratio": 1.0912453119274592,
    "eager_rel_max_vs_fp32": 0.01597474329173565,
-   "unfused_compiled_nocg_ms": 1.144703984260559,
-   "best_unfused_ms": 1.144703984260559,
+   "unfused_compiled_nocg_ms": 1.4325279593467712,
+   "best_unfused_ms": 1.4325279593467712,
    "fused_paths": {
-    "compiled_ms": 2.9999200105667114,
-    "compiled_forced_triton_ms": 1.128879964351654
+    "compiled_ms": 2.6966240406036377,
+    "compiled_forced_triton_ms": 1.4710400104522705
    },
-   "best_fused_ms": 1.128879964351654,
-   "measured_gain": 1.0304585721358626,
+   "best_fused_ms": 1.4710400104522705,
+   "measured_gain": 0.9872525299477845,
    "measured_gain_verified": null,
    "est_unfused_ms": 1.013366462745098,
    "est_fused_ms": 0.9393493333333333,
@@ -1641,26 +1641,26 @@
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 4,
-     "total_us": 1777.74,
-     "avg_us": 444.435
+     "total_us": 1366.536,
+     "avg_us": 341.634
     },
     {
      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8::Params)",
      "count": 1,
-     "total_us": 1065.312,
-     "avg_us": 1065.312
+     "total_us": 1268.451,
+     "avg_us": 1268.451
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 45.13,
-     "avg_us": 45.13
+     "total_us": 39.477,
+     "avg_us": 39.477
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
-    "dominant_frac_of_gpu_time": 0.6155,
+    "dominant_frac_of_gpu_time": 0.511,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -1670,20 +1670,20 @@
     {
      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8::Params)",
      "count": 1,
-     "total_us": 1046.045,
-     "avg_us": 1046.045
+     "total_us": 1268.367,
+     "avg_us": 1268.367
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 44.284,
-     "avg_us": 44.284
+     "total_us": 48.16,
+     "avg_us": 48.16
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8::Params)",
-    "dominant_frac_of_gpu_time": 0.9594,
+    "dominant_frac_of_gpu_time": 0.9634,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -1693,20 +1693,20 @@
     {
      "name": "triton_tem_fused_bmm_0",
      "count": 1,
-     "total_us": 999.206,
-     "avg_us": 999.206
+     "total_us": 1329.088,
+     "avg_us": 1329.088
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_1",
      "count": 1,
-     "total_us": 44.672,
-     "avg_us": 44.672
+     "total_us": 46.153,
+     "avg_us": 46.153
     }
    ],
    "forced_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "triton_tem_fused_bmm_0",
-    "dominant_frac_of_gpu_time": 0.9572,
+    "dominant_frac_of_gpu_time": 0.9664,
     "triton_gemm_template_present": true,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_1"
@@ -1718,41 +1718,41 @@
    "nocg_max_abs_diff": 8.0,
    "forced_numerics_ok": true,
    "forced_max_abs_diff": 8.0,
-   "compiled_over_gemm_ratio": 2.759470689259282,
-   "nocg_over_gemm_ratio": 1.052953772540292,
-   "forced_over_gemm_ratio": 1.0383980780647484,
+   "compiled_over_gemm_ratio": 2.250277008055355,
+   "nocg_over_gemm_ratio": 1.1954149639609748,
+   "forced_over_gemm_ratio": 1.2275524743557713,
    "triton_over_gemm_ratio": null,
-   "compiled_cudagraph_input_copy_us": 1777.74,
+   "compiled_cudagraph_input_copy_us": 1366.536,
    "triton_info": {},
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1500.0,
-     "max": 1500.0
+     "median": 1125.0,
+     "min": 285.0,
+     "max": 2070.0
     },
     "mem_mhz": {
      "median": 5501.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 8001.0
     },
     "temp_c": {
-     "median": 71.0,
-     "min": 70.0,
+     "median": 73.0,
+     "min": 72.0,
      "max": 74.0
     },
     "power_w": {
-     "median": 15.2,
-     "min": 11.02,
-     "max": 30.99
+     "median": 17.04,
+     "min": 10.99,
+     "max": 36.65
     },
-    "n_samples": 22
+    "n_samples": 21
    },
-   "est_unfused_ms_adj": 1.0235230897863707,
-   "est_fused_ms_adj": 0.9485990901788076,
-   "estimated_gain_adj": 1.0789838408905075
+   "est_unfused_ms_adj": 0.9800069376360626,
+   "est_fused_ms_adj": 0.9214389387052507,
+   "estimated_gain_adj": 1.0635614542327765
   },
   {
    "name": "moe_E32",
@@ -1763,19 +1763,19 @@
     "hidden": 2048,
     "inter": 2048
    },
-   "gemm_only_ms": 4.2057600021362305,
-   "unfused_ms": 4.85807991027832,
-   "gemm_only_repeat_ms": 4.4682559967041025,
-   "gemm_drift_ratio": 1.0624134507044012,
+   "gemm_only_ms": 4.39900803565979,
+   "unfused_ms": 5.645264148712158,
+   "gemm_only_repeat_ms": 5.612367868423462,
+   "gemm_drift_ratio": 1.2758257822963228,
    "eager_rel_max_vs_fp32": 0.01613393984735012,
-   "unfused_compiled_nocg_ms": 4.551743984222412,
-   "best_unfused_ms": 4.551743984222412,
+   "unfused_compiled_nocg_ms": 8.605888366699219,
+   "best_unfused_ms": 5.645264148712158,
    "fused_paths": {
-    "compiled_ms": 11.8580322265625,
-    "compiled_forced_triton_ms": 4.283312082290649
+    "compiled_ms": 11.273215770721434,
+    "compiled_forced_triton_ms": 6.979632139205933
    },
-   "best_fused_ms": 4.283312082290649,
-   "measured_gain": 1.1341877073034319,
+   "best_fused_ms": 6.979632139205933,
+   "measured_gain": 0.8088197251831692,
    "measured_gain_verified": null,
    "est_unfused_ms": 4.031620517647059,
    "est_fused_ms": 3.735552,
@@ -1786,26 +1786,26 @@
     {
      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
      "count": 14,
-     "total_us": 7489.466,
-     "avg_us": 534.962
+     "total_us": 5818.57,
+     "avg_us": 415.612
     },
     {
      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8::Params)",
      "count": 1,
-     "total_us": 3911.191,
-     "avg_us": 3911.191
+     "total_us": 5028.762,
+     "avg_us": 5028.762
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 241.813,
-     "avg_us": 241.813
+     "total_us": 185.697,
+     "avg_us": 185.697
     }
    ],
    "fusion_evidence": {
     "n_kernels": 3,
     "dominant_kernel": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
-    "dominant_frac_of_gpu_time": 0.6433,
+    "dominant_frac_of_gpu_time": 0.5274,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -1815,20 +1815,20 @@
     {
      "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8::Params)",
      "count": 1,
-     "total_us": 4211.863,
-     "avg_us": 4211.863
+     "total_us": 8038.925,
+     "avg_us": 8038.925
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_0",
      "count": 1,
-     "total_us": 237.923,
-     "avg_us": 237.923
+     "total_us": 228.481,
+     "avg_us": 228.481
     }
    ],
    "nocg_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_64x64_32x6_nn_align8::Params)",
-    "dominant_frac_of_gpu_time": 0.9465,
+    "dominant_frac_of_gpu_time": 0.9724,
     "triton_gemm_template_present": false,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_0"
@@ -1838,20 +1838,20 @@
     {
      "name": "triton_tem_fused_bmm_0",
      "count": 1,
-     "total_us": 3966.552,
-     "avg_us": 3966.552
+     "total_us": 6581.779,
+     "avg_us": 6581.779
     },
     {
      "name": "triton_poi_fused_mul_silu_slice_1",
      "count": 1,
-     "total_us": 236.786,
-     "avg_us": 236.786
+     "total_us": 179.126,
+     "avg_us": 179.126
     }
    ],
    "forced_fusion_evidence": {
     "n_kernels": 2,
     "dominant_kernel": "triton_tem_fused_bmm_0",
-    "dominant_frac_of_gpu_time": 0.9437,
+    "dominant_frac_of_gpu_time": 0.9735,
     "triton_gemm_template_present": true,
     "separate_elementwise_kernels": [
      "triton_poi_fused_mul_silu_slice_1"
@@ -1863,45 +1863,45 @@
    "nocg_max_abs_diff": 16.0,
    "forced_numerics_ok": true,
    "forced_max_abs_diff": 16.0,
-   "compiled_over_gemm_ratio": 2.819474297282644,
-   "nocg_over_gemm_ratio": 1.08226431891274,
-   "forced_over_gemm_ratio": 1.0184394925328664,
+   "compiled_over_gemm_ratio": 2.56267223868133,
+   "nocg_over_gemm_ratio": 1.9563247661602543,
+   "forced_over_gemm_ratio": 1.5866377334678101,
    "triton_over_gemm_ratio": null,
-   "compiled_cudagraph_input_copy_us": 7489.466,
+   "compiled_cudagraph_input_copy_us": 5818.57,
    "triton_info": {},
    "compile_error": null,
    "nocg_error": null,
    "forced_error": null,
    "clocks": {
     "gr_mhz": {
-     "median": 1500.0,
-     "min": 1305.0,
-     "max": 1500.0
+     "median": 1222.5,
+     "min": 405.0,
+     "max": 2070.0
     },
     "mem_mhz": {
-     "median": 5501.0,
+     "median": 7001.0,
      "min": 5501.0,
-     "max": 5501.0
+     "max": 8001.0
     },
     "temp_c": {
-     "median": 72.0,
-     "min": 69.0,
-     "max": 73.0
+     "median": 74.0,
+     "min": 72.0,
+     "max": 75.0
     },
     "power_w": {
-     "median": 22.24,
-     "min": 11.56,
-     "max": 33.26
+     "median": 26.59,
+     "min": 10.96,
+     "max": 32.76
     },
-    "n_samples": 15
+    "n_samples": 18
    },
-   "est_unfused_ms_adj": 4.072031915187836,
-   "est_fused_ms_adj": 3.7723359167575836,
-   "estimated_gain_adj": 1.0794457346968847
+   "est_unfused_ms_adj": 3.8985989380162214,
+   "est_fused_ms_adj": 3.6643269422929734,
+   "estimated_gain_adj": 1.0639331586434946
   }
  ],
  "annotations_post_hoc": {
-  "note": "Added post-run during analysis (2026-07-22, LOCKED-CLOCK round). residual_numerics uses FRESH seed-0 tensors at the same dims: strict allclose numerics_ok=false flags on residual rows are false alarms (fused paths round once vs eager twice; <=1-2 bf16 ulp apart). derived_late_phase = drift-robust within-late-phase comparisons. aggregates as named.",
+  "note": "Added after the run during analysis/review (2026-07-21). residual_numerics uses FRESH seed-0 tensors at the same dims (not the run's exact tensors): the strict allclose numerics_ok=false flags on residual rows are false alarms -- addmm/fused paths round once where eager mm+add rounds twice; values differ by <=1 bf16 ulp and the fused paths are closer to the fp32 reference than eager is. derived_late_phase gives drift-robust within-late-phase gains (both operands measured after the compile/autotune phase) and *_over_gemm_repeat re-references fused kernels to the CONTEMPORANEOUS end-of-config GEMM. swiglu_M2048_h1024 is flagged baseline_unmeasurable (unfused_ms < gemm_only_ms, impossible at steady clock).",
   "residual_numerics": {
    "residual_M2048": {
     "eager_rel_max_vs_fp32": 0.01182724442332983,
@@ -1930,81 +1930,79 @@
   },
   "derived_late_phase": {
    "swiglu_M2048_h1024": {
-    "drift": 0.9825128247902207,
-    "late_phase_gain_nocg_over_triton": 1.0618890230158053,
-    "triton_over_gemm_repeat": 1.0632570116038151
+    "late_phase_gain_nocg_over_triton": 1.0595519303272378,
+    "triton_over_gemm_repeat": 1.0900716906883465,
+    "drift": 0.8598502222996176,
+    "baseline_unmeasurable": true
    },
    "swiglu_M2048_h2048": {
-    "drift": 1.0193153268058968,
-    "late_phase_gain_nocg_over_triton": 1.0237895796566316,
-    "triton_over_gemm_repeat": 1.0502096316974756
+    "late_phase_gain_nocg_over_triton": 1.0456401203085348,
+    "triton_over_gemm_repeat": 1.0751921793161998,
+    "drift": 0.8715360770948137
    },
    "swiglu_M2048_h4096": {
-    "drift": 1.0010316986008623,
-    "late_phase_gain_nocg_over_triton": 0.9929903771684743,
-    "triton_over_gemm_repeat": 1.054195587263387
+    "late_phase_gain_nocg_over_triton": 1.0557005494528227,
+    "triton_over_gemm_repeat": 0.9887250297682881,
+    "drift": 1.0015881421863342
    },
    "swiglu_M8192_h1024": {
-    "drift": 1.0101274202789874,
-    "late_phase_gain_nocg_over_triton": 1.107769119499256,
-    "triton_over_gemm_repeat": 1.066437863381651
+    "late_phase_gain_nocg_over_triton": 1.0738774539374614,
+    "triton_over_gemm_repeat": 0.9800687755090949,
+    "drift": 1.01381787188543
    },
    "swiglu_M8192_h2048": {
-    "drift": 0.9917197981303851,
-    "late_phase_gain_nocg_over_triton": 1.0876080505601609,
-    "triton_over_gemm_repeat": 1.0430067527886524
+    "late_phase_gain_nocg_over_triton": 0.8900428169187625,
+    "triton_over_gemm_repeat": 1.0057189652799563,
+    "drift": 1.34526200791347
    },
    "swiglu_M8192_h4096": {
-    "drift": 1.003239277545519,
-    "late_phase_gain_nocg_over_triton": 0.9741314801083563,
-    "triton_over_gemm_repeat": 1.0736145497586538
+    "late_phase_gain_nocg_over_triton": 0.9397949334875566,
+    "triton_over_gemm_repeat": 1.046650328279197,
+    "drift": 1.2341800163877972
    },
    "residual_M2048": {
-    "drift": 1.0018900020562165,
-    "late_phase_gain_nocg_over_forced": 1.038703989446155,
-    "forced_over_gemm_repeat": 0.9985680034907293
+    "late_phase_gain_nocg_over_forced": 1.0285678225445374,
+    "forced_over_gemm_repeat": 0.9955253711674565,
+    "drift": 1.1356866396811511
    },
    "residual_M8192": {
-    "drift": 1.0591798187804227,
-    "late_phase_gain_nocg_over_forced": 0.9238742614133105,
-    "forced_over_gemm_repeat": 1.070179411260683
+    "late_phase_gain_nocg_over_forced": 1.0340335309877764,
+    "forced_over_gemm_repeat": 1.0002255985064212,
+    "drift": 0.9994097446779632
    },
    "residual_glm_M2048": {
-    "drift": 1.1300131641798443,
-    "late_phase_gain_nocg_over_forced": 1.0395293192530999,
-    "forced_over_gemm_repeat": 0.920233761876412
+    "late_phase_gain_nocg_over_forced": 1.0052611578718291,
+    "forced_over_gemm_repeat": 1.005517848077988,
+    "drift": 1.0005557079613077
    },
    "residual_glm_M8192": {
-    "drift": 1.2246699365643208,
-    "late_phase_gain_nocg_over_forced": 1.086752515872474,
-    "forced_over_gemm_repeat": 0.8914588274608897
+    "late_phase_gain_nocg_over_forced": 1.0105104796773077,
+    "forced_over_gemm_repeat": 1.0022943662784058,
+    "drift": 0.9992194880114714
    },
    "moe_E8": {
-    "drift": 0.9325346140679186,
     "late_phase_gain_nocg_over_triton": null,
-    "triton_over_gemm_repeat": null
+    "triton_over_gemm_repeat": null,
+    "drift": 1.0912453119274592
    },
    "moe_E32": {
-    "drift": 1.0624134507044012,
     "late_phase_gain_nocg_over_triton": null,
-    "triton_over_gemm_repeat": null
+    "triton_over_gemm_repeat": null,
+    "drift": 1.2758257822963228
    }
   },
   "aggregates": {
-   "clock_lock_note": "clocks LOCKED 1500/5501 by host for this run; ClockSampler medians 1500 in 11/12 configs; residual_glm_M8192 ran at 1290 MHz median = POWER-limit throttling below the lock (35 W part) \u2014 the lock caps, it cannot floor.",
-   "drift_clean_n7": {
+   "clean5": {
     "configs": [
-     "swiglu_M2048_h1024",
-     "swiglu_M2048_h2048",
      "swiglu_M2048_h4096",
      "swiglu_M8192_h1024",
-     "swiglu_M8192_h2048",
-     "swiglu_M8192_h4096",
-     "residual_M2048"
+     "residual_M8192",
+     "residual_glm_M2048",
+     "residual_glm_M8192"
     ],
-    "gm_meas_ver": 1.041907409607397,
-    "gm_est_stock": 1.0858091359251103,
-    "gm_est_adj": 1.0860107966534613
+    "gm_meas_ver": 1.0367836767498197,
+    "gm_est_stock": 1.0569382076380593,
+    "gm_est_adj": 1.0461048122019638
    },
    "all_with_verified_path_n10": {
     "configs": [
@@ -2019,48 +2017,50 @@
      "residual_glm_M2048",
      "residual_glm_M8192"
     ],
-    "gm_meas_ver": 1.0285364948234619,
-    "gm_est_stock": 1.0689916177857333,
-    "gm_est_adj": 1.0691533001914335
+    "gm_meas_ver": 0.9825448145591502
    },
-   "swiglu_all6_clean": {
+   "nonthrottled_n7": {
     "configs": [
      "swiglu_M2048_h1024",
      "swiglu_M2048_h2048",
      "swiglu_M2048_h4096",
      "swiglu_M8192_h1024",
-     "swiglu_M8192_h2048",
-     "swiglu_M8192_h4096"
+     "residual_M8192",
+     "residual_glm_M2048",
+     "residual_glm_M8192"
     ],
-    "gm_meas_ver": 1.0402291517251034,
-    "gm_est_adj": 1.0916185948824946
+    "gm_meas_ver": 1.0138623283029646,
+    "gm_est_adj": 1.0598148018770108
    },
-   "all12_c500_convention_gm_measured_gain": 1.0611034637595833,
-   "delivered_fraction": {
-    "swiglu_M2048_h1024": 0.3917828148013207,
-    "swiglu_M2048_h2048": 0.3011955279512211,
-    "swiglu_M2048_h4096": -0.17646316339750792,
-    "swiglu_M8192_h1024": 0.6782561701420206,
-    "swiglu_M8192_h2048": 1.102740768833198,
-    "swiglu_M8192_h4096": -0.6271892910356078,
-    "residual_M2048": 0.9824436203870237,
-    "residual_M8192": 0.26500274062916546,
-    "residual_glm_M2048": -1.1309080012463797,
-    "residual_glm_M8192": 0.14098776937368265
+   "delivered_fraction_clean": {
+    "swiglu_M2048_h4096": 1.7424619910748167,
+    "swiglu_M8192_h1024": 0.5777710307527468,
+    "residual_M8192": 0.8119892717768483,
+    "residual_glm_M2048": 0.3654003138672176,
+    "residual_glm_M8192": 0.9582373551077732
    },
-   "compiled_default_vs_eager_wins": 1,
+   "compiled_default_vs_eager_wins": 2,
+   "compiled_default_vs_best_unfused_wins": 1,
    "forced_over_gemm_range": [
-    1.0004552990705988,
-    1.181772314114532
+    0.9593605912567906,
+    1.5936404723814246
    ],
-   "triton_over_gemm_range": [
-    1.034370446324191,
-    1.0772381278255423
-   ],
-   "delivered_fraction_summary": {
-    "overall_from_geomeans_n10": 0.41265557456355334,
-    "clean7_from_geomeans": 0.48723429194874857
-   }
+   "all12_c500_convention_gm_measured_gain": 0.9917414203236209,
+   "clean5_plus_positive_drift_tainted_n7": {
+    "configs": [
+     "swiglu_M2048_h4096",
+     "swiglu_M8192_h1024",
+     "residual_M8192",
+     "residual_glm_M2048",
+     "residual_glm_M8192",
+     "swiglu_M2048_h2048",
+     "residual_M2048"
+    ],
+    "note": "clean5 + the two drift-excluded rows that carried POSITIVE verified gains (swiglu_M2048_h2048 drift 0.87, residual_M2048 drift 1.14); the honest \"include the tainted-but-plausible evidence\" sensitivity",
+    "gm_meas_ver": 1.0378972177148806,
+    "gm_est_adj": 1.0480815451649468
+   },
+   "nonthrottled_n7_note": "CAUTION: this set includes swiglu_M2048_h1024 (baseline unmeasurable, mv 0.879) \u2014 it is the drift<1.05 cut, not a usable-evidence cut"
   }
  }
 }

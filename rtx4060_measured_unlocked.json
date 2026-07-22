@@ -1,6 +1,6 @@
 {
  "task": "RTX4060 sim-real study: T2 (peak specs) + T3 (single-GEMM estimator validation) raw measurements",
- "note": "LOCKED-CLOCK run (2026-07-22): host locked clocks to 1500 MHz core / 5501 MHz VRAM (the rtx4060-measured profile's calibration point) via nvidia-smi -lgc/-lmc; lock verified held under load. Prior unlocked-clock run archived as rtx4060_measured_unlocked.json. warm_clocks methodology retained as a no-op guard.",
+ "note": "clock-warmed methodology (see rtx4060_common.warm_clocks): clocks unlocked on this box, DVFS ramped with a continuous busy-GEMM before every timed region",
  "t2_peak": {
   "task": "T2-peak (peak-spec validation of rtx4060-measured profile)",
   "smoke": false,
@@ -9,7 +9,7 @@
    "tflops": "2 * n^3 / time_s / 1e12 for a square n GEMM (bf16)",
    "gbs": "bytes / time_s / 1e9; copy counts read+write (2x), sum counts read only",
    "gain_convention": "gains/speedups = unfused_time/fused_time (>1.0 => fusion faster); not used in this T2 script but documented for the study",
-   "clocks": "LOCKED 1500/5501 by host for this run (verified under load); per-group ClockSampler summaries recorded [corrected post-run]"
+   "clocks": "unlocked on this WSL2 box; per-group nvidia-smi ClockSampler summaries recorded"
   },
   "versions": {
    "torch": "2.11.0+cu130",
@@ -28,204 +28,204 @@
    "total_memory_bytes": 8585216000,
    "total_memory_gib": 7.99560546875
   },
-  "clocks_locked": true,
+  "clocks_locked": false,
   "peak_gemm": {
    "shapes": [
     {
      "n": 2048,
-     "time_ms": 1.0091520547866821,
-     "tflops": 17.024064017420585,
+     "time_ms": 1.0332159996032715,
+     "tflops": 16.627567895383567,
      "clocks": {
       "gr_mhz": {
-       "median": 1500.0,
-       "min": 1500.0,
-       "max": 1500.0
+       "median": 210.0,
+       "min": 210.0,
+       "max": 210.0
       },
       "mem_mhz": {
-       "median": 5501.0,
-       "min": 5501.0,
-       "max": 5501.0
+       "median": 810.0,
+       "min": 810.0,
+       "max": 810.0
       },
       "temp_c": {
-       "median": 57.0,
-       "min": 57.0,
-       "max": 57.0
+       "median": 60.0,
+       "min": 60.0,
+       "max": 60.0
       },
       "power_w": {
-       "median": 9.5,
-       "min": 9.5,
-       "max": 9.5
+       "median": 8.89,
+       "min": 8.89,
+       "max": 8.89
       },
       "n_samples": 1
      }
     },
     {
      "n": 4096,
-     "time_ms": 7.615999937057496,
-     "tflops": 18.046081224772262,
+     "time_ms": 7.727616071701049,
+     "tflops": 17.785427251660305,
      "clocks": {
       "gr_mhz": {
-       "median": 1500.0,
-       "min": 1500.0,
-       "max": 1500.0
+       "median": 1455.0,
+       "min": 1440.0,
+       "max": 1470.0
       },
       "mem_mhz": {
-       "median": 5501.0,
-       "min": 5501.0,
-       "max": 5501.0
+       "median": 7501.0,
+       "min": 7001.0,
+       "max": 8001.0
       },
       "temp_c": {
-       "median": 60.0,
-       "min": 58.0,
-       "max": 62.0
+       "median": 63.0,
+       "min": 61.0,
+       "max": 65.0
       },
       "power_w": {
-       "median": 14.25,
-       "min": 9.9,
-       "max": 18.6
+       "median": 16.25,
+       "min": 11.79,
+       "max": 20.71
       },
       "n_samples": 2
      }
     },
     {
      "n": 6144,
-     "time_ms": 25.413631439208984,
-     "tflops": 18.252270206938903,
+     "time_ms": 26.182144165039062,
+     "tflops": 17.71651951207977,
      "clocks": {
       "gr_mhz": {
-       "median": 1500.0,
-       "min": 1500.0,
-       "max": 1500.0
+       "median": 1815.0,
+       "min": 1395.0,
+       "max": 2070.0
       },
       "mem_mhz": {
-       "median": 5501.0,
-       "min": 5501.0,
-       "max": 5501.0
+       "median": 8001.0,
+       "min": 7001.0,
+       "max": 8001.0
       },
       "temp_c": {
-       "median": 62.0,
-       "min": 58.0,
-       "max": 63.0
+       "median": 65.0,
+       "min": 62.0,
+       "max": 66.0
       },
       "power_w": {
-       "median": 19.23,
-       "min": 9.5,
-       "max": 29.29
+       "median": 35.43,
+       "min": 12.06,
+       "max": 35.95
       },
       "n_samples": 3
      }
     },
     {
      "n": 8192,
-     "time_ms": 60.65356826782227,
-     "tflops": 18.127731956691974,
+     "time_ms": 58.514944076538086,
+     "tflops": 18.790270504878695,
      "clocks": {
       "gr_mhz": {
-       "median": 1500.0,
-       "min": 1500.0,
-       "max": 1500.0
+       "median": 1515.0,
+       "min": 435.0,
+       "max": 1575.0
       },
       "mem_mhz": {
        "median": 5501.0,
        "min": 5501.0,
-       "max": 5501.0
+       "max": 7001.0
       },
       "temp_c": {
-       "median": 64.0,
-       "min": 59.0,
-       "max": 64.0
+       "median": 67.0,
+       "min": 63.0,
+       "max": 68.0
       },
       "power_w": {
-       "median": 31.075000000000003,
-       "min": 9.82,
-       "max": 32.04
+       "median": 35.370000000000005,
+       "min": 12.44,
+       "max": 35.9
       },
       "n_samples": 6
      }
     }
    ],
-   "measured_peak_tflops": 18.252270206938903
+   "measured_peak_tflops": 18.790270504878695
   },
   "hbm_bandwidth": {
    "tensor_bytes": 1610612736,
    "tensor_numel": 805306368,
    "d2d_copy": {
-    "time_ms": 21.87673568725586,
+    "time_ms": 14.993407726287842,
     "bytes": 3221225472,
-    "gbs": 147.24433837158358,
+    "gbs": 214.84278496290383,
     "clocks": {
      "gr_mhz": {
-      "median": 1500.0,
-      "min": 1500.0,
-      "max": 1500.0
+      "median": 1260.0,
+      "min": 210.0,
+      "max": 1470.0
      },
      "mem_mhz": {
-      "median": 5501.0,
-      "min": 5501.0,
-      "max": 5501.0
+      "median": 7001.0,
+      "min": 810.0,
+      "max": 8001.0
      },
      "temp_c": {
-      "median": 62.0,
-      "min": 60.0,
-      "max": 62.0
+      "median": 65.0,
+      "min": 63.0,
+      "max": 65.0
      },
      "power_w": {
-      "median": 23.85,
-      "min": 9.7,
-      "max": 24.08
+      "median": 35.37,
+      "min": 10.69,
+      "max": 36.41
      },
-     "n_samples": 4
+     "n_samples": 3
     }
    },
    "read_sum": {
-    "time_ms": 9.590271949768066,
+    "time_ms": 9.685440063476562,
     "bytes": 1610612736,
-    "gbs": 167.94234245244226,
+    "gbs": 166.2921586881283,
     "clocks": {
      "gr_mhz": {
-      "median": 1500.0,
-      "min": 1500.0,
-      "max": 1500.0
+      "median": 1237.5,
+      "min": 480.0,
+      "max": 1995.0
      },
      "mem_mhz": {
-      "median": 5501.0,
+      "median": 6251.0,
       "min": 5501.0,
-      "max": 5501.0
+      "max": 7001.0
      },
      "temp_c": {
-      "median": 61.0,
-      "min": 60.0,
-      "max": 62.0
+      "median": 64.5,
+      "min": 64.0,
+      "max": 65.0
      },
      "power_w": {
-      "median": 17.225,
-      "min": 9.71,
-      "max": 24.74
+      "median": 20.53,
+      "min": 13.96,
+      "max": 27.1
      },
      "n_samples": 2
     }
    },
-   "measured_bw_gbs": 167.94234245244226
+   "measured_bw_gbs": 214.84278496290383
   },
   "comparison": {
    "profile_name": "RTX 4060 Laptop (locked 1500/5501, measured)",
    "profile_peak_tflops": 18.432,
    "profile_bw_gbs": 170.0,
-   "measured_peak_tflops": 18.252270206938903,
-   "measured_bw_gbs": 167.94234245244226,
-   "tflops_ratio_measured_over_profile": 0.9902490346646541,
-   "bw_ratio_measured_over_profile": 0.9878961320731898,
+   "measured_peak_tflops": 18.790270504878695,
+   "measured_bw_gbs": 214.84278496290383,
+   "tflops_ratio_measured_over_profile": 1.019437418884478,
+   "bw_ratio_measured_over_profile": 1.2637810880170814,
    "tensor_cores": 96,
    "flops_per_core_per_clock": 128.0,
    "profile_tensor_clock_mhz": 1500.0,
-   "implied_tensor_clock_mhz": 1485.373551996981,
-   "implied_over_profile_clock": 0.990249034664654
+   "implied_tensor_clock_mhz": 1529.1561283267167,
+   "implied_over_profile_clock": 1.019437418884478
   },
   "adjusted_profile": {
-   "clock_hz": 1485373551.996981,
-   "bw_bytes_per_s": 167942342452.44226,
-   "check_peak_tflops": 18.252270206938903,
-   "check_bw_gbs": 167.94234245244226
+   "clock_hz": 1529156128.3267167,
+   "bw_bytes_per_s": 214842784962.90384,
+   "check_peak_tflops": 18.790270504878695,
+   "check_bw_gbs": 214.84278496290383
   }
  },
  "t3_validate": {
@@ -243,7 +243,7 @@
    "achieved_tflops": "2*m*n*k / measured_seconds / 1e12 (2 FLOP per multiply-add)",
    "gemm_layout": "row-major a[M,K] @ b[K,N] -> c[M,N], bf16 inputs",
    "gain_convention": "study-wide: gain = unfused_time / fused_time, >1.0 => fusion FASTER (not used in T3)",
-   "clocks": "LOCKED 1500/5501 by host for this run; ClockSampler summary recorded per-sweep [corrected post-run]"
+   "clocks": "UNLOCKED on this WSL2 box (no root); ClockSampler summary recorded per-sweep"
   },
   "profile_stock": {
    "name": "RTX 4060 Laptop (locked 1500/5501, measured)",
@@ -253,39 +253,39 @@
   },
   "profile_adjusted": {
    "name": "RTX 4060 Laptop (locked 1500/5501, measured)",
-   "clock_hz": 1485373551.996981,
-   "bw_bytes_per_s": 167942342452.44226,
-   "peak_tensor_tflops": 18.252270206938903
+   "clock_hz": 1529156128.3267167,
+   "bw_bytes_per_s": 214842784962.90384,
+   "peak_tensor_tflops": 18.790270504878695
   },
   "adjusted_profile_source": {
    "applied": {
-    "clock_hz": 1485373551.996981,
-    "bw_bytes_per_s": 167942342452.44226
+    "clock_hz": 1529156128.3267167,
+    "bw_bytes_per_s": 214842784962.90384
    },
    "source": "rtx4060_peak.json"
   },
   "clocks": {
    "gr_mhz": {
-    "median": 1500.0,
-    "min": 1500.0,
-    "max": 1500.0
+    "median": 2070.0,
+    "min": 210.0,
+    "max": 2070.0
    },
    "mem_mhz": {
-    "median": 5501.0,
-    "min": 5501.0,
-    "max": 5501.0
+    "median": 7001.0,
+    "min": 810.0,
+    "max": 8001.0
    },
    "temp_c": {
-    "median": 61.0,
-    "min": 60.0,
-    "max": 67.0
+    "median": 65.0,
+    "min": 62.0,
+    "max": 72.0
    },
    "power_w": {
-    "median": 11.29,
-    "min": 9.51,
-    "max": 32.85
+    "median": 15.165,
+    "min": 8.84,
+    "max": 36.41
    },
-   "n_samples": 125
+   "n_samples": 124
   },
   "shapes": [
    {
@@ -299,12 +299,12 @@
     "bytes_gib": 0.005859375,
     "est_ms_stock": 0.12014933333333333,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 0.12133244176705678,
-    "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 0.1812479943037033,
-    "achieved_tflops": 11.848316756551949,
-    "ratio_est_over_meas_stock": 0.6629002091576712,
-    "ratio_est_over_meas_adjusted": 0.6694277761978946
+    "est_ms_adjusted": 0.11785846890415996,
+    "mapping_adjusted": "64x64x32 s2 MNK",
+    "meas_ms": 0.1730560064315796,
+    "achieved_tflops": 12.409182970768722,
+    "ratio_est_over_meas_stock": 0.6942800530927324,
+    "ratio_est_over_meas_adjusted": 0.6810423477023733
    },
    {
     "m": 1536,
@@ -317,12 +317,12 @@
     "bytes_gib": 0.01318359375,
     "est_ms_stock": 0.393216,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 0.39708799123764044,
+    "est_ms_adjusted": 0.38571862550452357,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 0.4341759979724884,
-    "achieved_tflops": 16.693132153425154,
-    "ratio_est_over_meas_stock": 0.9056603815877362,
-    "ratio_est_over_meas_adjusted": 0.9145784039006273
+    "meas_ms": 0.40038400888442993,
+    "achieved_tflops": 18.102014943588944,
+    "ratio_est_over_meas_stock": 0.9820971649082545,
+    "ratio_est_over_meas_adjusted": 0.9633717055264824
    },
    {
     "m": 2048,
@@ -336,12 +336,12 @@
     "bytes_gib": 0.0234375,
     "est_ms_stock": 0.9393493333333333,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 0.9485990901788076,
+    "est_ms_adjusted": 0.9214389387052507,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 1.0101760029792786,
-    "achieved_tflops": 17.00680785658339,
-    "ratio_est_over_meas_stock": 0.9298868024610973,
-    "ratio_est_over_meas_adjusted": 0.9390433819266502
+    "meas_ms": 1.022976040840149,
+    "achieved_tflops": 16.79400933954478,
+    "ratio_est_over_meas_stock": 0.9182515482590043,
+    "ratio_est_over_meas_adjusted": 0.9007434210761106
    },
    {
     "m": 3072,
@@ -354,12 +354,12 @@
     "bytes_gib": 0.052734375,
     "est_ms_stock": 3.145728,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 3.1767039299011235,
+    "est_ms_adjusted": 3.0857490040361886,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 3.180543899536133,
-    "achieved_tflops": 18.230233673069694,
-    "ratio_est_over_meas_stock": 0.9890534761865069,
-    "ratio_est_over_meas_adjusted": 0.9987926688779333
+    "meas_ms": 3.25271999835968,
+    "achieved_tflops": 17.825714640436274,
+    "ratio_est_over_meas_stock": 0.9671069140861693,
+    "ratio_est_over_meas_adjusted": 0.9486672709585535
    },
    {
     "m": 4096,
@@ -372,12 +372,12 @@
     "bytes_gib": 0.09375,
     "est_ms_stock": 7.514794666666666,
     "mapping_stock": "128x64x32 s2 MNK",
-    "est_ms_adjusted": 7.588792721430461,
-    "mapping_adjusted": "128x64x32 s2 MNK",
-    "meas_ms": 7.6134397983551025,
-    "achieved_tflops": 18.05214950300046,
-    "ratio_est_over_meas_stock": 0.9870432899844104,
-    "ratio_est_over_meas_adjusted": 0.9967626884066297
+    "est_ms_adjusted": 7.328653884585947,
+    "mapping_adjusted": "64x64x32 s2 NMK",
+    "meas_ms": 6.919679880142212,
+    "achieved_tflops": 19.862039263754983,
+    "ratio_est_over_meas_stock": 1.0860032251249494,
+    "ratio_est_over_meas_adjusted": 1.059103023770997
    },
    {
     "m": 6144,
@@ -390,12 +390,12 @@
     "bytes_gib": 0.2109375,
     "est_ms_stock": 25.165824,
     "mapping_stock": "128x64x32 s2 MNK",
-    "est_ms_adjusted": 25.413631439208988,
-    "mapping_adjusted": "128x64x32 s2 MNK",
-    "meas_ms": 25.40134334564209,
-    "achieved_tflops": 18.261099881852516,
-    "ratio_est_over_meas_stock": 0.9907280751873111,
-    "ratio_est_over_meas_adjusted": 1.000483757626504
+    "est_ms_adjusted": 24.68599203228951,
+    "mapping_adjusted": "96x64x32 s2 MNK",
+    "meas_ms": 24.808880805969242,
+    "achieved_tflops": 18.697194427907927,
+    "ratio_est_over_meas_stock": 1.0143877185279908,
+    "ratio_est_over_meas_adjusted": 0.9950465813173577
    },
    {
     "m": 8192,
@@ -408,12 +408,12 @@
     "bytes_gib": 0.0859375,
     "est_ms_stock": 3.757397333333333,
     "mapping_stock": "64x128x32 s2 NMK",
-    "est_ms_adjusted": 3.7943963607152305,
+    "est_ms_adjusted": 3.685755754821003,
     "mapping_adjusted": "64x128x32 s2 NMK",
-    "meas_ms": 3.8113279342651367,
-    "achieved_tflops": 18.030323792972126,
-    "ratio_est_over_meas_stock": 0.9858499184898394,
-    "ratio_est_over_meas_adjusted": 0.9955575658033292
+    "meas_ms": 3.9004158973693848,
+    "achieved_tflops": 17.61849980725068,
+    "ratio_est_over_meas_stock": 0.9633324835609173,
+    "ratio_est_over_meas_adjusted": 0.9449648067804364
    },
    {
     "m": 1024,
@@ -426,12 +426,12 @@
     "bytes_gib": 0.0859375,
     "est_ms_stock": 3.757397333333333,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 3.7943963607152305,
+    "est_ms_adjusted": 3.685755754821003,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 3.82259202003479,
-    "achieved_tflops": 17.97719358378574,
-    "ratio_est_over_meas_stock": 0.9829449006433955,
-    "ratio_est_over_meas_adjusted": 0.9926239422957559
+    "meas_ms": 3.8978559970855717,
+    "achieved_tflops": 17.63007068177521,
+    "ratio_est_over_meas_stock": 0.9639651480564547,
+    "ratio_est_over_meas_adjusted": 0.9455854083826708
    },
    {
     "m": 4096,
@@ -444,12 +444,12 @@
     "bytes_gib": 0.0859375,
     "est_ms_stock": 3.8447786666666666,
     "mapping_stock": "128x64x32 s2 MNK",
-    "est_ms_adjusted": 3.882638136545817,
-    "mapping_adjusted": "128x64x32 s2 MNK",
-    "meas_ms": 3.9516160488128658,
-    "achieved_tflops": 17.39022108604011,
-    "ratio_est_over_meas_stock": 0.9729636227744608,
-    "ratio_est_over_meas_adjusted": 0.9825443789540811
+    "est_ms_adjusted": 3.771471004933119,
+    "mapping_adjusted": "64x128x32 s2 NMK",
+    "meas_ms": 3.4365439414978027,
+    "achieved_tflops": 19.996682104419396,
+    "ratio_est_over_meas_stock": 1.1187922319977484,
+    "ratio_est_over_meas_adjusted": 1.0974604338361347
    },
    {
     "m": 16384,
@@ -462,12 +462,12 @@
     "bytes_gib": 0.09765625,
     "est_ms_stock": 3.735552,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 3.7723359167575836,
+    "est_ms_adjusted": 3.6643269422929734,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 3.842047929763794,
-    "achieved_tflops": 17.886158109491575,
-    "ratio_est_over_meas_stock": 0.9722814676675986,
-    "ratio_est_over_meas_adjusted": 0.9818555066775296
+    "meas_ms": 3.9214080572128296,
+    "achieved_tflops": 17.52418410259576,
+    "ratio_est_over_meas_stock": 0.9526047647933564,
+    "ratio_est_over_meas_adjusted": 0.9344416313811069
    },
    {
     "m": 2048,
@@ -480,12 +480,12 @@
     "bytes_gib": 0.09765625,
     "est_ms_stock": 3.735552,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 3.7723359167575836,
+    "est_ms_adjusted": 3.6643269422929734,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 3.84767997264862,
-    "achieved_tflops": 17.859977239400113,
-    "ratio_est_over_meas_stock": 0.9708582903345169,
-    "ratio_est_over_meas_adjusted": 0.9804183153415506
+    "meas_ms": 3.6331520080566406,
+    "achieved_tflops": 18.91456140112282,
+    "ratio_est_over_meas_stock": 1.0281848906173714,
+    "ratio_est_over_meas_adjusted": 1.0085806853572878
    },
    {
     "m": 2048,
@@ -498,12 +498,12 @@
     "bytes_gib": 0.015625,
     "est_ms_stock": 0.46967466666666663,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 0.4742995450894038,
+    "est_ms_adjusted": 0.46071946935262537,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 0.5299199819564819,
-    "achieved_tflops": 16.209871083339184,
-    "ratio_est_over_meas_stock": 0.8863124295343844,
-    "ratio_est_over_meas_adjusted": 0.8950399328937821
+    "meas_ms": 0.5340160131454468,
+    "achieved_tflops": 16.08553747555958,
+    "ratio_est_over_meas_stock": 0.8795142001458,
+    "ratio_est_over_meas_adjusted": 0.8627446705931305
    },
    {
     "m": 2048,
@@ -516,12 +516,12 @@
     "bytes_gib": 0.009765625,
     "est_ms_stock": 0.24029866666666666,
     "mapping_stock": "64x64x32 s2 MNK",
-    "est_ms_adjusted": 0.24266488353411356,
-    "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 0.30873599648475647,
-    "achieved_tflops": 13.91145621146273,
-    "ratio_est_over_meas_stock": 0.7783305782373555,
-    "ratio_est_over_meas_adjusted": 0.7859947861508754
+    "est_ms_adjusted": 0.23571693780831993,
+    "mapping_adjusted": "64x64x32 s2 MNK",
+    "meas_ms": 0.7342079877853394,
+    "achieved_tflops": 5.849796471099849,
+    "ratio_est_over_meas_stock": 0.3272896381739214,
+    "ratio_est_over_meas_adjusted": 0.3210492690488633
    },
    {
     "m": 2048,
@@ -534,12 +534,12 @@
     "bytes_gib": 0.0390625,
     "est_ms_stock": 1.8786986666666665,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 1.8971981803576152,
+    "est_ms_adjusted": 1.8428778774105015,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 1.950719952583313,
-    "achieved_tflops": 17.61387549376211,
-    "ratio_est_over_meas_stock": 0.9630796384579603,
-    "ratio_est_over_meas_adjusted": 0.9725630672127901
+    "meas_ms": 2.021375894546509,
+    "achieved_tflops": 16.998193389314427,
+    "ratio_est_over_meas_stock": 0.9294157864132185,
+    "ratio_est_over_meas_adjusted": 0.9116947928301812
    },
    {
     "m": 2048,
@@ -552,12 +552,12 @@
     "bytes_gib": 0.109375,
     "est_ms_stock": 7.471104,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 7.544671833515167,
+    "est_ms_adjusted": 7.328653884585947,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 7.618016004562378,
-    "achieved_tflops": 18.04130542515121,
-    "ratio_est_over_meas_stock": 0.9807151882492249,
-    "ratio_est_over_meas_adjusted": 0.9903722739617132
+    "meas_ms": 7.000063896179199,
+    "achieved_tflops": 19.633956991023673,
+    "ratio_est_over_meas_stock": 1.0672908291705603,
+    "ratio_est_over_meas_adjusted": 1.0469409984366143
    },
    {
     "m": 2048,
@@ -570,12 +570,12 @@
     "bytes_gib": 0.0625,
     "est_ms_stock": 3.757397333333333,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 3.7943963607152305,
+    "est_ms_adjusted": 3.685755754821003,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 3.875839948654175,
-    "achieved_tflops": 17.73021529432911,
-    "ratio_est_over_meas_stock": 0.9694407878318172,
-    "ratio_est_over_meas_adjusted": 0.9789868547159115
+    "meas_ms": 3.959808111190796,
+    "achieved_tflops": 17.35424414677878,
+    "ratio_est_over_meas_stock": 0.9488836902764478,
+    "ratio_est_over_meas_adjusted": 0.9307915058824959
    },
    {
     "m": 2048,
@@ -588,12 +588,12 @@
     "bytes_gib": 0.2734375,
     "est_ms_stock": 22.413312,
     "mapping_stock": "128x64x32 s2 MNK",
-    "est_ms_adjusted": 22.634015500545505,
-    "mapping_adjusted": "128x64x32 s2 MNK",
-    "meas_ms": 22.759936332702637,
-    "achieved_tflops": 18.115905703284508,
-    "ratio_est_over_meas_stock": 0.9847704172966166,
-    "ratio_est_over_meas_adjusted": 0.9944674347802896
+    "est_ms_adjusted": 21.985961653757844,
+    "mapping_adjusted": "64x64x32 s2 NMK",
+    "meas_ms": 21.77791976928711,
+    "achieved_tflops": 18.93279361775778,
+    "ratio_est_over_meas_stock": 1.0291759836313186,
+    "ratio_est_over_meas_adjusted": 1.0095528813897152
    },
    {
     "m": 8192,
@@ -606,12 +606,12 @@
     "bytes_gib": 0.05078125,
     "est_ms_stock": 1.867776,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 1.8861679583787918,
+    "est_ms_adjusted": 1.8321634711464867,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 1.9230719804763794,
-    "achieved_tflops": 17.867109872553222,
-    "ratio_est_over_meas_stock": 0.9712460162501658,
-    "ratio_est_over_meas_adjusted": 0.9808098591876703
+    "meas_ms": 1.9722239971160889,
+    "achieved_tflops": 17.421823493803437,
+    "ratio_est_over_meas_stock": 0.9470404998271904,
+    "ratio_est_over_meas_adjusted": 0.9289834591940836
    },
    {
     "m": 8192,
@@ -624,12 +624,12 @@
     "bytes_gib": 0.033203125,
     "est_ms_stock": 0.9393493333333333,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 0.9485990901788076,
-    "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 1.0255360007286072,
-    "achieved_tflops": 16.752087856295937,
-    "ratio_est_over_meas_stock": 0.9159593935912135,
-    "ratio_est_over_meas_adjusted": 0.924978830099442
+    "est_ms_adjusted": 0.9214389387052507,
+    "mapping_adjusted": "64x64x32 s2 MNK",
+    "meas_ms": 1.0465279817581177,
+    "achieved_tflops": 16.41606290845528,
+    "ratio_est_over_meas_stock": 0.8975864474787102,
+    "ratio_est_over_meas_adjusted": 0.8804723378320728
    },
    {
     "m": 8192,
@@ -642,12 +642,12 @@
     "bytes_gib": 0.109375,
     "est_ms_stock": 7.471104,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 7.544671833515167,
+    "est_ms_adjusted": 7.328653884585947,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 7.626752138137817,
-    "achieved_tflops": 18.02063984546346,
-    "ratio_est_over_meas_stock": 0.979591818992059,
-    "ratio_est_over_meas_adjusted": 0.9892378429066542
+    "meas_ms": 6.907903909683228,
+    "achieved_tflops": 19.895898273764853,
+    "ratio_est_over_meas_stock": 1.0815298095746961,
+    "ratio_est_over_meas_adjusted": 1.0609084869164043
    },
    {
     "m": 8192,
@@ -660,12 +660,12 @@
     "bytes_gib": 0.0703125,
     "est_ms_stock": 3.735552,
     "mapping_stock": "64x64x32 s2 NMK",
-    "est_ms_adjusted": 3.7723359167575836,
+    "est_ms_adjusted": 3.6643269422929734,
     "mapping_adjusted": "64x64x32 s2 NMK",
-    "meas_ms": 3.814911961555481,
-    "achieved_tflops": 18.013384693674695,
-    "ratio_est_over_meas_stock": 0.9791974330324722,
-    "ratio_est_over_meas_adjusted": 0.9888395734352576
+    "meas_ms": 3.892224073410034,
+    "achieved_tflops": 17.655580829855428,
+    "ratio_est_over_meas_stock": 0.9597474167840571,
+    "ratio_est_over_meas_adjusted": 0.9414480957882271
    },
    {
     "m": 8192,
@@ -678,12 +678,12 @@
     "bytes_gib": 0.25,
     "est_ms_stock": 29.884416,
     "mapping_stock": "128x64x32 s2 MNK",
-    "est_ms_adjusted": 30.17868733406067,
+    "est_ms_adjusted": 29.314615538343787,
     "mapping_adjusted": "128x64x32 s2 MNK",
-    "meas_ms": 30.187007904052734,
-    "achieved_tflops": 18.211669590949853,
-    "ratio_est_over_meas_stock": 0.9899760882226387,
-    "ratio_est_over_meas_adjusted": 0.9997243658590308
+    "meas_ms": 28.78668785095215,
+    "achieved_tflops": 19.09757095830031,
+    "ratio_est_over_meas_stock": 1.0381331869345831,
+    "ratio_est_over_meas_adjusted": 1.0183392994055125
    },
    {
     "m": 8192,
@@ -696,12 +696,12 @@
     "bytes_gib": 0.15625,
     "est_ms_stock": 14.942208,
     "mapping_stock": "128x64x32 s2 MNK",
-    "est_ms_adjusted": 15.089343667030334,
+    "est_ms_adjusted": 14.657307769171894,
     "mapping_adjusted": "128x64x32 s2 MNK",
-    "meas_ms": 15.1418399810791,
-    "achieved_tflops": 18.15353400164585,
-    "ratio_est_over_meas_stock": 0.9868158703745017,
-    "ratio_est_over_meas_adjusted": 0.9965330293997055
+    "meas_ms": 14.030336380004883,
+    "achieved_tflops": 19.591683299606274,
+    "ratio_est_over_meas_stock": 1.0649928551459862,
+    "ratio_est_over_meas_adjusted": 1.0446868394446
    },
    {
     "m": 8192,
@@ -714,50 +714,50 @@
     "bytes_gib": 0.53125,
     "est_ms_stock": 89.522176,
     "mapping_stock": "128x64x32 s2 MNK",
-    "est_ms_adjusted": 90.40369933843613,
+    "est_ms_adjusted": 87.8152737398632,
     "mapping_adjusted": "128x64x32 s2 MNK",
-    "meas_ms": 90.81292724609375,
-    "achieved_tflops": 18.161152730983485,
-    "ratio_est_over_meas_stock": 0.9857867014616108,
-    "ratio_est_over_meas_adjusted": 0.995493726278103
+    "meas_ms": 78.00985717773438,
+    "achieved_tflops": 21.141782607118206,
+    "ratio_est_over_meas_stock": 1.1475751813778667,
+    "ratio_est_over_meas_adjusted": 1.125694584208616
    }
   ],
   "summary": {
    "stock": {
     "all": {
      "n": 24,
-     "geomean": 0.9431841158558659,
+     "geomean": 0.9373931943012582,
      "pct_within_1.5x": 95.83333333333333,
-     "pct_within_2x": 100.0,
-     "min_ratio": 0.6629002091576712,
-     "max_ratio": 0.9907280751873111
+     "pct_within_2x": 95.83333333333333,
+     "min_ratio": 0.3272896381739214,
+     "max_ratio": 1.1475751813778667
     },
     "ffn": {
      "n": 14,
-     "geomean": 0.9482635925676757,
-     "pct_within_1.5x": 100.0,
-     "pct_within_2x": 100.0,
-     "min_ratio": 0.7783305782373555,
-     "max_ratio": 0.9899760882226387
+     "geomean": 0.9146175502871848,
+     "pct_within_1.5x": 92.85714285714286,
+     "pct_within_2x": 92.85714285714286,
+     "min_ratio": 0.3272896381739214,
+     "max_ratio": 1.1475751813778667
     }
    },
    "prior_calibration_band": "est/meas geomean expected in 0.72-0.96 (locked-clock calibration)",
    "adjusted": {
     "all": {
      "n": 24,
-     "geomean": 0.9524716337393587,
-     "pct_within_1.5x": 100.0,
-     "pct_within_2x": 100.0,
-     "min_ratio": 0.6694277761978946,
-     "max_ratio": 1.000483757626504
+     "geomean": 0.9192967221221605,
+     "pct_within_1.5x": 95.83333333333333,
+     "pct_within_2x": 95.83333333333333,
+     "min_ratio": 0.3210492690488633,
+     "max_ratio": 1.125694584208616
     },
     "ffn": {
      "n": 14,
-     "geomean": 0.957601127971615,
-     "pct_within_1.5x": 100.0,
-     "pct_within_2x": 100.0,
-     "min_ratio": 0.7859947861508754,
-     "max_ratio": 0.9997243658590308
+     "geomean": 0.8971787118507064,
+     "pct_within_1.5x": 92.85714285714286,
+     "pct_within_2x": 92.85714285714286,
+     "min_ratio": 0.3210492690488633,
+     "max_ratio": 1.125694584208616
     }
    }
   }
