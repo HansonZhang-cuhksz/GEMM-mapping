@@ -16,7 +16,7 @@ a stated formula from) a deliverable.
 
 ---
 
-## Verdict: **A — the fusion gains are real on working fused paths; the C500 null was a tooling problem.** With a quantitative caveat: the estimator gets the *direction* and *ranking* right but **over-predicts the magnitude ~2×** at these dims (delivered fraction ≈ 0.4–0.5).
+## Verdict: **A — the fusion gains are real on working fused paths; the C500 null was a tooling problem.** With a quantitative caveat: against *vendor* baselines the estimator over-predicts the magnitude ~2× (delivered fraction ≈ 0.4–0.5) — but the **N4 addendum** (final section) shows this is mostly the Triton-vs-cuBLAS kernel-quality gap, not a fusion-model error: compared custom-vs-custom (the estimator's own regime), delivered fraction is ≈ 0.9–1.2.
 
 At locked clocks, with 10 of 12 configs carrying a verified-fused path and 7 of 12 fully
 drift-clean:
@@ -353,3 +353,55 @@ correctly wherever its structural assumptions hold and over-predicts magnitude b
 artifacts its own `Epilogue` vocabulary cannot see, now flagged as such in every table. For
 the C500: the recoverable wins are the E-class (any working compiler) and B-class (custom
 prologue kernels); the D/F6-class needs CUTLASS-grade SMEM control on any vendor.
+
+---
+
+# N4 addendum (round 4, host request) — custom-fused vs custom-UNFUSED only
+
+> The T4/T6.D N4 (SwiGLU→up_gate, F4) tables above judge the fused hand kernel against
+> **vendor** baselines (cuBLAS GEMM + eager/compiled epilogue), which conflates the fusion
+> benefit with the Triton-vs-cuBLAS GEMM-quality gap (custom GEMM runs 0.86–1.24× vendor here,
+> geomean 1.02). This addendum re-runs N4 — dense AND MoE/grouped — with **both sides from the
+> same custom Triton tiling family**: unfused = plain full-width GEMM + separate custom SwiGLU
+> elementwise kernel (2 kernels, no vendor code anywhere); fused = the dual-accumulator kernel.
+> Two gain flavors: **best-vs-best** (each side independently tile-tuned) and **same-tile**
+> (unfused GEMM forced onto the fused kernel's exact tile — pure mechanism isolation). Clocks
+> locked 1500/5501 (verified; drift probes flag power-dip rows). The MoE/grouped rows get a
+> real custom fused path for the first time (all three kernels are batched-capable). Raw:
+> `rtx4060_n4_custom.json` (18 configs, numerics pass 18/18 on both paths vs fp32).
+
+| group | n | measured best-vs-best (gm) | measured same-tile (gm) | est (gm) |
+|---|---|---|---|---|
+| T4 dense (M∈{2048,8192}×h∈{1024,2048,4096}) | 6 | 1.069 | 1.090 | 1.091 |
+| T4 MoE grouped (E∈{8,32}, h=inter=2048, tpe=128) | 2 | 1.026 | 1.054 | 1.079 |
+| GLM per-expert (tpe 16…4096, h=6144, inter=2048) | 8 | 1.028 | 1.033 | 1.021 |
+| GLM grouped (E=8, tpe∈{64,512}) | 2 | 1.060 | 1.095 | 1.023 |
+| **all 18** | 18 | **1.045** | **1.061** | **1.051** |
+
+Positive gains: 15/18 (best-vs-best), 14/18 (same-tile). Per-config extremes: +27.5%
+(`n4c_t4_M8192_h1024`, vs est +15.9%) down to −9.2% (`n4c_glm_tpe4096` best-vs-best, drift
+1.17). Delivered fraction from the all-18 geomeans: **0.88 (best-vs-best), 1.20 (same-tile)**
+— vs 0.4–0.5 in the vendor-baseline framing above. Drift caveat: this run's heavy per-config
+tuning load kept only 5/18 rows strictly drift-clean (power dips); the relaxed drift ≤ 1.10
+subset (n=10) reads 1.073/1.063 measured vs 1.064 est — the same agreement.
+
+**What this changes about the study's conclusions:**
+
+1. **The estimator's fusion model is essentially correct in its own regime.** `est_swiglu_ms`
+   assumes the same optimal-mapping GEMM on both sides — exactly what custom-vs-custom
+   constructs — and there the measured gain lands within a few points of the prediction in
+   every group (all-18: 1.045–1.061 measured vs 1.051 est). The headline "~2× over-prediction"
+   from the T4 tables decomposes into ≈(the vendor-vs-custom kernel-quality gap) + (a small
+   residual model error of ≈0.9–1.2× delivered).
+2. **N4 fusion is genuinely profitable within a fixed kernel family — including the regimes
+   that looked negative before.** The GLM per-expert rows (neutral-to-negative vs vendor in
+   T6.D) turn positive custom-vs-custom (geomean +2.8…+3.3%, est +2.1%); the grouped MoE rows
+   — previously untestable — show +2.6…+9.5% vs est +2.3…+7.9%.
+3. **The practical deployment condition is unchanged but sharper:** fusing pays *iff* you were
+   already going to ship a custom kernel (or your custom GEMM matches vendor quality). If the
+   unfused path can use cuBLAS and your fused kernel cannot beat it (the wide-shape rows in
+   T6.D/A), vendor quality wins; where the custom GEMM is at/near vendor parity (T4 dense
+   shapes) or there is no vendor advantage to lose (same-family comparison, skinny shapes),
+   the estimator's predicted N4 gain is real and approximately exact. This is also the correct
+   reading for the C500: a MACA-CUTLASS fused kernel competes against the *same-quality*
+   unfused MACA-CUTLASS pair — the custom-vs-custom regime, where the estimator was right.

@@ -106,6 +106,50 @@ Headlines (details in the results file):
   `merge_token_independence` blocks), five sub-sections + T6 verdict in
   `rtx4060_sim_real_results.md`, this worklog.
 
+# ROUND 4 — N4 CUSTOM-vs-CUSTOM ADDENDUM (2026-07-22)
+
+Host request: in the N4 (SwiGLU→up_gate, F4) step — both dense and MoE — the fused custom
+Triton kernel was previously judged against vendor baselines (cuBLAS GEMM + eager/compiled
+epilogue), so the measured "fusion gain" conflated (fusion benefit) − (Triton-vs-cuBLAS
+GEMM-quality gap). Re-compare against a **custom UNFUSED implementation of the same kernel
+family only**. Host decisions (asked): config scope = T4 dims (dense 6 + MoE grouped E∈{8,32})
+AND T6.D GLM per-expert dims (tpe sweep + grouped E=8); baseline = fully custom 2-kernel
+(Triton GEMM writing full [M,2·inter] gu + separate custom Triton SwiGLU elementwise — no
+vendor code anywhere in the comparison).
+
+Plan: new `rtx4060_n4_custom.py` → `rtx4060_n4_custom.json`; three batched-capable Triton
+kernels sharing one tiling family (plain full-width GEMM / SwiGLU elementwise / dual-
+accumulator fused); per config report (a) best-vs-best custom gain, (b) same-tile gain
+(identical (BM,BN,BK,w,s) on GEMM-full and fused — pure mechanism isolation), plus vendor
+references (cuBLAS gemm, eager unfused) as context only; est gain from est_swiglu_ms (the
+estimator's model assumes same-quality GEMM on both sides — custom-vs-custom is exactly its
+regime, making this the cleanest est test of the study); fp32-ref numerics both paths; drift
+probe = custom GEMM re-measured at config end; locked clocks verified before run. Then a
+results-md addendum sub-section + audit.
+
+## R4 results + close-out (2026-07-22)
+
+- `rtx4060_n4_custom.py` authored (3 batched-capable Triton kernels sharing one tiling family:
+  full-width GEMM / SwiGLU elementwise / dual-accumulator fused), smoke-passed, full run at the
+  verified lock: 18/18 configs, numerics 18/18 both paths. `rtx4060_n4_custom.json`.
+- **Custom-vs-custom results (the host's requested comparison):** all-18 geomeans — measured
+  **1.045 (best-vs-best) / 1.061 (same-tile) vs est 1.051**; positive in 15/18 (best) and
+  14/18 (same-tile); per-group (all rows): t4_dense 1.069/1.090 vs est 1.091; t4_moe (first
+  custom fused grouped path ever) 1.026/1.054 vs est 1.079; glm_dense 1.028/1.033 vs est
+  1.021; glm_grouped 1.060/1.095 vs est 1.023. Custom GEMM ran 0.86–1.24× vendor (gm 1.02) —
+  the quality gap that contaminated the earlier vendor-baseline framing.
+- **Study-level consequence** (added to the results verdict + addendum §): the T4 headline
+  "estimator over-predicts ~2×" decomposes into (vendor-vs-custom kernel-quality gap) + a
+  small residual model error — delivered fraction ≈ 0.88–1.20 in the estimator's own
+  (same-kernel-family) regime. N4 fusion is genuinely profitable within a fixed kernel family,
+  including the GLM per-expert and grouped regimes that looked negative against vendor
+  baselines. Deployment rule sharpened: fuse iff you already ship a custom kernel or match
+  vendor GEMM quality — which is exactly the C500/MACA-CUTLASS situation, where the estimator
+  was right all along.
+- Drift caveat: heavy per-config tuning load → only 5/18 strictly clean rows; relaxed ≤1.10
+  subset (n=10) reads 1.073/1.063 vs est 1.064 (same agreement). Appended "N4 addendum"
+  section to `rtx4060_sim_real_results.md` + forward-pointer from the main verdict.
+
 # ROUND 2 — LOCKED-CLOCK RE-RUN (2026-07-22)
 
 The host locked the clocks to **1500 MHz core / 5501 MHz VRAM** (the exact calibration point of

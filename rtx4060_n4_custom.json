@@ -1,0 +1,1453 @@
+{
+ "conventions": {
+  "comparison": "custom_gain_* compares the custom FUSED kernel against a fully-custom 2-kernel UNFUSED implementation of the same Triton tiling family (plain full-width GEMM + separate SwiGLU elementwise). Vendor numbers (cuBLAS gemm_only, eager unfused) are CONTEXT columns only.",
+  "custom_gain_best": "best-vs-best: each side independently tile-tuned",
+  "custom_gain_same_tile": "unfused GEMM forced to the fused kernel's best (BM,BN,BK,warps,stages) -- pure mechanism isolation",
+  "estimator": "est_swiglu_ms assumes the SAME optimal-mapping GEMM on both sides -- custom-vs-custom is exactly the estimator's regime",
+  "units": "ms for *_ms; gain = unfused/fused (>1 => fusion faster)",
+  "timing": "median of 30 cuda events after 15 warmup + clock warmer",
+  "numerics": "rel-vs-fp32 <= max(2*eager_rel, 5e-2)"
+ },
+ "env": {
+  "task": "N4 addendum: custom-fused vs custom-unfused (host request, round 4)",
+  "torch": "2.11.0+cu130",
+  "triton": "3.6.0",
+  "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "clocks_locked": true,
+  "clocks_note": "clocks LOCKED 1500/5501 by host; ClockSampler per config",
+  "smoke": false,
+  "adjusted_profile": {
+   "applied": {
+    "clock_hz": 1485373551.996981,
+    "bw_bytes_per_s": 167942342452.44226
+   },
+   "source": "t2 adjusted_profile block",
+   "check_peak_tflops": 18.252270206938903,
+   "check_bw_gbs": 167.94234245244226
+  }
+ },
+ "configs": [
+  {
+   "name": "n4c_t4_M2048_h1024",
+   "kind": "n4_custom",
+   "group": "t4_dense",
+   "dims": {
+    "M": 2048,
+    "hidden": 1024,
+    "inter": 1024,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 0.5724160075187683,
+   "custom_unfused_cfg": {
+    "gemm": [
+     32,
+     64,
+     32,
+     4,
+     2
+    ],
+    "elem": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 0.5483520030975342,
+   "custom_fused_cfg": [
+    128,
+    64,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0438842281696816,
+   "custom_unfused_same_tile_ms": 0.579584002494812,
+   "custom_gain_same_tile": 1.0569561143587594,
+   "vendor_gemm_only_ms": 0.5304319858551025,
+   "vendor_eager_unfused_ms": 1.0987520217895508,
+   "custom_gemm_over_vendor_gemm": 0.9671814411498058,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.015669485554099083,
+    "rel_tol": 0.05,
+    "unfused_rel_max_vs_fp32": 0.01401088573038578,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.003891641739755869,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 0.5436917960784313,
+   "est_fused_ms": 0.46967466666666663,
+   "estimated_gain": 1.157592339261286,
+   "gemm_drift_ratio": 1.091785237188679,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 68.5,
+     "min": 65.0,
+     "max": 70.0
+    },
+    "power_w": {
+     "median": 20.645,
+     "min": 11.24,
+     "max": 24.89
+    },
+    "n_samples": 16
+   },
+   "est_unfused_ms_adj": 0.5492235446969669,
+   "est_fused_ms_adj": 0.4742995450894038,
+   "estimated_gain_adj": 1.157967681781015
+  },
+  {
+   "name": "n4c_t4_M2048_h2048",
+   "kind": "n4_custom",
+   "group": "t4_dense",
+   "dims": {
+    "M": 2048,
+    "hidden": 2048,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 2.0285439491271973,
+   "custom_unfused_cfg": {
+    "gemm": [
+     32,
+     64,
+     32,
+     4,
+     2
+    ],
+    "elem": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 2.059231996536255,
+   "custom_fused_cfg": [
+    128,
+    64,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 0.9850973336366778,
+   "custom_unfused_same_tile_ms": 2.0090880393981934,
+   "custom_gain_same_tile": 0.975649194834576,
+   "vendor_gemm_only_ms": 1.9927040338516233,
+   "vendor_eager_unfused_ms": 4.2193920612335205,
+   "custom_gemm_over_vendor_gemm": 0.9840698855642191,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.01639418676495552,
+    "rel_tol": 0.05,
+    "unfused_rel_max_vs_fp32": 0.015691915526986122,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.009376033209264278,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 2.026732925490196,
+   "est_fused_ms": 1.8786986666666665,
+   "estimated_gain": 1.078796169630643,
+   "gemm_drift_ratio": 1.0652741003269053,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 71.0,
+     "min": 67.0,
+     "max": 72.0
+    },
+    "power_w": {
+     "median": 28.155,
+     "min": 10.52,
+     "max": 29.56
+    },
+    "n_samples": 12
+   },
+   "est_unfused_ms_adj": 2.0470461795727415,
+   "est_fused_ms_adj": 1.8971981803576152,
+   "estimated_gain_adj": 1.0789838408905075
+  },
+  {
+   "name": "n4c_t4_M2048_h4096",
+   "kind": "n4_custom",
+   "group": "t4_dense",
+   "dims": {
+    "M": 2048,
+    "hidden": 4096,
+    "inter": 4096,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 7.978496074676513,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "elem": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 7.767039775848389,
+   "custom_fused_cfg": [
+    128,
+    64,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0272248250209361,
+   "custom_unfused_same_tile_ms": 8.024543762207033,
+   "custom_gain_same_tile": 1.0331534270185343,
+   "vendor_gemm_only_ms": 7.570432186126709,
+   "vendor_eager_unfused_ms": 15.763967990875242,
+   "custom_gemm_over_vendor_gemm": 1.0192073151336387,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.04192795976996422,
+    "rel_tol": 0.08385591953992844,
+    "unfused_rel_max_vs_fp32": 0.04192795976996422,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.04192795976996422,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 7.767172517647059,
+   "est_fused_ms": 7.471104,
+   "estimated_gain": 1.0396284829721363,
+   "gemm_drift_ratio": 1.0025215543706067,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1425.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 72.0,
+     "min": 67.0,
+     "max": 73.0
+    },
+    "power_w": {
+     "median": 28.92,
+     "min": 14.23,
+     "max": 31.11
+    },
+    "n_samples": 17
+   },
+   "est_unfused_ms_adj": 7.84436783194542,
+   "est_fused_ms_adj": 7.544671833515167,
+   "estimated_gain_adj": 1.0397228673484424
+  },
+  {
+   "name": "n4c_t4_M8192_h1024",
+   "kind": "n4_custom",
+   "group": "t4_dense",
+   "dims": {
+    "M": 8192,
+    "hidden": 1024,
+    "inter": 1024,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 2.475008010864258,
+   "custom_unfused_cfg": {
+    "gemm": [
+     32,
+     64,
+     32,
+     4,
+     2
+    ],
+    "elem": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 1.9420160055160522,
+   "custom_fused_cfg": [
+    64,
+    128,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.2744529416000223,
+   "custom_unfused_same_tile_ms": 2.3398399353027344,
+   "custom_gain_same_tile": 1.2048510046553238,
+   "vendor_gemm_only_ms": 1.986559987068176,
+   "vendor_eager_unfused_ms": 4.485631942749023,
+   "custom_gemm_over_vendor_gemm": 0.9907216387820966,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.014959449879825115,
+    "rel_tol": 0.05,
+    "unfused_rel_max_vs_fp32": 0.014002869836986065,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.00395614467561245,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 2.1638445176470587,
+   "est_fused_ms": 1.867776,
+   "estimated_gain": 1.1585139318885447,
+   "gemm_drift_ratio": 1.0504682839714998,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 72.0,
+     "min": 68.0,
+     "max": 73.0
+    },
+    "power_w": {
+     "median": 28.28,
+     "min": 11.09,
+     "max": 29.04
+    },
+    "n_samples": 12
+   },
+   "est_unfused_ms_adj": 2.185863956809044,
+   "est_fused_ms_adj": 1.8861679583787918,
+   "estimated_gain_adj": 1.1588914693937693
+  },
+  {
+   "name": "n4c_t4_M8192_h2048",
+   "kind": "n4_custom",
+   "group": "t4_dense",
+   "dims": {
+    "M": 8192,
+    "hidden": 2048,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 8.464384078979492,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "elem": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 7.795680046081542,
+   "custom_fused_cfg": [
+    64,
+    128,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0857787940173442,
+   "custom_unfused_same_tile_ms": 8.952320098876953,
+   "custom_gain_same_tile": 1.1483693591782016,
+   "vendor_gemm_only_ms": 7.610368013381958,
+   "vendor_eager_unfused_ms": 16.409088134765625,
+   "custom_gemm_over_vendor_gemm": 1.034041989151884,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.016680682078003883,
+    "rel_tol": 0.05,
+    "unfused_rel_max_vs_fp32": 0.014901166781783104,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.009076301008462906,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 8.063241035294118,
+   "est_fused_ms": 7.471104,
+   "estimated_gain": 1.0792569659442723,
+   "gemm_drift_ratio": 1.0080025875861307,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1275.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 73.0,
+     "min": 69.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 30.45,
+     "min": 24.84,
+     "max": 32.41
+    },
+    "n_samples": 17
+   },
+   "est_unfused_ms_adj": 8.144063830375671,
+   "est_fused_ms_adj": 7.544671833515167,
+   "estimated_gain_adj": 1.0794457346968847
+  },
+  {
+   "name": "n4c_t4_M8192_h4096",
+   "kind": "n4_custom",
+   "group": "t4_dense",
+   "dims": {
+    "M": 8192,
+    "hidden": 4096,
+    "inter": 4096,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 38.54387092590332,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "elem": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 37.83475303649902,
+   "custom_fused_cfg": [
+    64,
+    128,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0187425008092483,
+   "custom_unfused_same_tile_ms": 43.11142349243164,
+   "custom_gain_same_tile": 1.1394662322981792,
+   "vendor_gemm_only_ms": 30.197232246398926,
+   "vendor_eager_unfused_ms": 62.48908805847168,
+   "custom_gemm_over_vendor_gemm": 1.0984932364871465,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.05115175247192383,
+    "rel_tol": 0.10230350494384766,
+    "unfused_rel_max_vs_fp32": 0.05115175247192383,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.05115175247192383,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 31.068690070588236,
+   "est_fused_ms": 29.84072533333333,
+   "estimated_gain": 1.0411506330204117,
+   "gemm_drift_ratio": 1.1943879030757507,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1297.5,
+     "min": 990.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 69.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 30.715,
+     "min": 25.25,
+     "max": 35.76
+    },
+    "n_samples": 42
+   },
+   "est_unfused_ms_adj": 31.37747132778168,
+   "est_fused_ms_adj": 30.134566446145374,
+   "estimated_gain_adj": 1.0412451555876057
+  },
+  {
+   "name": "n4c_t4_moe_E8",
+   "kind": "n4_custom",
+   "group": "t4_moe",
+   "dims": {
+    "M": 128,
+    "hidden": 2048,
+    "inter": 2048,
+    "count": 8,
+    "batched": true
+   },
+   "custom_unfused_ms": 1.2810239791870117,
+   "custom_unfused_cfg": {
+    "gemm": [
+     64,
+     64,
+     32,
+     4,
+     2
+    ],
+    "elem": [
+     64,
+     64,
+     2
+    ]
+   },
+   "custom_fused_ms": 1.2636159658432007,
+   "custom_fused_cfg": [
+    64,
+    64,
+    64,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.013776348047482,
+   "custom_unfused_same_tile_ms": 1.2866560220718384,
+   "custom_gain_same_tile": 1.0182334323492528,
+   "vendor_gemm_only_ms": 1.0398719906806946,
+   "vendor_eager_unfused_ms": 2.7412480115890503,
+   "custom_gemm_over_vendor_gemm": 1.2427375266656147,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.015075815841555595,
+    "rel_tol": 0.05,
+    "unfused_rel_max_vs_fp32": 0.014012681320309639,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.011447729542851448,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 1.013366462745098,
+   "est_fused_ms": 0.9393493333333333,
+   "estimated_gain": 1.078796169630643,
+   "gemm_drift_ratio": 1.0748811608914242,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1365.0,
+     "min": 1185.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 22.56,
+     "min": 11.76,
+     "max": 24.94
+    },
+    "n_samples": 11
+   },
+   "est_unfused_ms_adj": 1.0235230897863707,
+   "est_fused_ms_adj": 0.9485990901788076,
+   "estimated_gain_adj": 1.0789838408905075
+  },
+  {
+   "name": "n4c_t4_moe_E32",
+   "kind": "n4_custom",
+   "group": "t4_moe",
+   "dims": {
+    "M": 128,
+    "hidden": 2048,
+    "inter": 2048,
+    "count": 32,
+    "batched": true
+   },
+   "custom_unfused_ms": 5.166591882705688,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "elem": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 4.973056077957153,
+   "custom_fused_cfg": [
+    64,
+    64,
+    64,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0389168756021823,
+   "custom_unfused_same_tile_ms": 5.425663948059082,
+   "custom_gain_same_tile": 1.091012018164865,
+   "vendor_gemm_only_ms": 4.460031986236572,
+   "vendor_eager_unfused_ms": 9.51193618774414,
+   "custom_gemm_over_vendor_gemm": 1.0138905089237937,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.01657973602414131,
+    "rel_tol": 0.05,
+    "unfused_rel_max_vs_fp32": 0.014650787226855755,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.012694451957941055,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 4.031620517647059,
+   "est_fused_ms": 3.735552,
+   "estimated_gain": 1.0792569659442723,
+   "gemm_drift_ratio": 1.1033740618232832,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1305.0,
+     "min": 1140.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 24.8,
+     "min": 14.87,
+     "max": 34.8
+    },
+    "n_samples": 14
+   },
+   "est_unfused_ms_adj": 4.072031915187836,
+   "est_fused_ms_adj": 3.7723359167575836,
+   "estimated_gain_adj": 1.0794457346968847
+  },
+  {
+   "name": "n4c_glm_tpe16",
+   "kind": "n4_custom",
+   "group": "glm_dense",
+   "dims": {
+    "M": 16,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 0.40755200386047363,
+   "custom_unfused_cfg": {
+    "gemm": [
+     64,
+     64,
+     32,
+     4,
+     2
+    ],
+    "elem": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 0.35123199224472046,
+   "custom_fused_cfg": [
+    32,
+    64,
+    32,
+    4,
+    2
+   ],
+   "custom_gain_best": 1.1603498908394208,
+   "custom_unfused_same_tile_ms": 0.3650559931993485,
+   "custom_gain_same_tile": 1.0393586041700784,
+   "vendor_gemm_only_ms": 0.35839998722076416,
+   "vendor_eager_unfused_ms": 0.6871039867401123,
+   "custom_gemm_over_vendor_gemm": 1.0428572212593012,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.013455753214657307,
+    "rel_tol": 0.05,
+    "unfused_rel_max_vs_fp32": 0.01420551910996437,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.012019731104373932,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 0.29915256470588236,
+   "est_fused_ms": 0.29761054117647057,
+   "estimated_gain": 1.005181347150259,
+   "gemm_drift_ratio": 1.0369862625938848,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1305.0,
+     "min": 1275.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 22.94,
+     "min": 11.26,
+     "max": 28.49
+    },
+    "n_samples": 11
+   },
+   "est_unfused_ms_adj": 0.302817831747234,
+   "est_fused_ms_adj": 0.301256915088743,
+   "estimated_gain_adj": 1.0051813471502593
+  },
+  {
+   "name": "n4c_glm_tpe32",
+   "kind": "n4_custom",
+   "group": "glm_dense",
+   "dims": {
+    "M": 32,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 0.4131840020418167,
+   "custom_unfused_cfg": {
+    "gemm": [
+     32,
+     64,
+     32,
+     4,
+     2
+    ],
+    "elem": [
+     64,
+     64,
+     2
+    ]
+   },
+   "custom_fused_ms": 0.3584000021219254,
+   "custom_fused_cfg": [
+    16,
+    64,
+    64,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.1528571417286269,
+   "custom_unfused_same_tile_ms": 0.3584000021219254,
+   "custom_gain_same_tile": 1.0,
+   "vendor_gemm_only_ms": 0.3973120003938675,
+   "vendor_eager_unfused_ms": 0.7843840122222899,
+   "custom_gemm_over_vendor_gemm": 0.8865979373710323,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.0328846275806427,
+    "rel_tol": 0.0657692551612854,
+    "unfused_rel_max_vs_fp32": 0.0328846275806427,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.030326122418045998,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 0.3022366117647059,
+   "est_fused_ms": 0.2991525647058823,
+   "estimated_gain": 1.0103092783505156,
+   "gemm_drift_ratio": 1.0348837327354639,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1365.0,
+     "min": 1320.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 24.2,
+     "min": 10.96,
+     "max": 28.62
+    },
+    "n_samples": 11
+   },
+   "est_unfused_ms_adj": 0.3059396650642157,
+   "est_fused_ms_adj": 0.3028178317472339,
+   "estimated_gain_adj": 1.0103092783505154
+  },
+  {
+   "name": "n4c_glm_tpe64",
+   "kind": "n4_custom",
+   "group": "glm_dense",
+   "dims": {
+    "M": 64,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 0.39219200611114496,
+   "custom_unfused_cfg": {
+    "gemm": [
+     64,
+     64,
+     32,
+     4,
+     2
+    ],
+    "elem": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 0.3819520026445388,
+   "custom_fused_cfg": [
+    64,
+    64,
+    64,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0268096603649333,
+   "custom_unfused_same_tile_ms": 0.38041600584983826,
+   "custom_gain_same_tile": 0.9959785606985544,
+   "vendor_gemm_only_ms": 0.39526399970054626,
+   "vendor_eager_unfused_ms": 0.7833600044250488,
+   "custom_gemm_over_vendor_gemm": 0.860103617176357,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 9.84360122680664,
+    "rel_tol": 19.68720245361328,
+    "unfused_rel_max_vs_fp32": 0.03610692545771599,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.03610692545771599,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 0.3084047058823529,
+   "est_fused_ms": 0.3022366117647059,
+   "estimated_gain": 1.020408163265306,
+   "gemm_drift_ratio": 1.1355421942868305,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1305.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 70.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 25.17,
+     "min": 12.06,
+     "max": 29.28
+    },
+    "n_samples": 11
+   },
+   "est_unfused_ms_adj": 0.3121833316981793,
+   "est_fused_ms_adj": 0.3059396650642157,
+   "estimated_gain_adj": 1.0204081632653061
+  },
+  {
+   "name": "n4c_glm_tpe128",
+   "kind": "n4_custom",
+   "group": "glm_dense",
+   "dims": {
+    "M": 128,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 0.5411840081214906,
+   "custom_unfused_cfg": {
+    "gemm": [
+     32,
+     64,
+     32,
+     4,
+     2
+    ],
+    "elem": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 0.5345279872417451,
+   "custom_fused_cfg": [
+    64,
+    64,
+    64,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0124521466389285,
+   "custom_unfused_same_tile_ms": 0.5493760108947754,
+   "custom_gain_same_tile": 1.0277778226910972,
+   "vendor_gemm_only_ms": 0.3967999964952469,
+   "vendor_eager_unfused_ms": 0.8064000010490417,
+   "custom_gemm_over_vendor_gemm": 1.119999975965869,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 9.904778480529785,
+    "rel_tol": 19.80955696105957,
+    "unfused_rel_max_vs_fp32": 0.04631960764527321,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.04631960764527321,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 0.40246814117647056,
+   "est_fused_ms": 0.393216,
+   "estimated_gain": 1.0235294117647058,
+   "gemm_drift_ratio": 1.2027650517437956,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1305.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 70.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 26.29,
+     "min": 10.96,
+     "max": 29.96
+    },
+    "n_samples": 11
+   },
+   "est_unfused_ms_adj": 0.4064534911885858,
+   "est_fused_ms_adj": 0.39708799123764044,
+   "estimated_gain_adj": 1.0235854524881376
+  },
+  {
+   "name": "n4c_glm_tpe256",
+   "kind": "n4_custom",
+   "group": "glm_dense",
+   "dims": {
+    "M": 256,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 0.9431039988994598,
+   "custom_unfused_cfg": {
+    "gemm": [
+     64,
+     64,
+     64,
+     4,
+     3
+    ],
+    "elem": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 0.984063982963562,
+   "custom_fused_cfg": [
+    64,
+    64,
+    64,
+    4,
+    3
+   ],
+   "custom_gain_best": 0.958376706420299,
+   "custom_unfused_same_tile_ms": 0.9492480158805847,
+   "custom_gain_same_tile": 0.9646202201424676,
+   "vendor_gemm_only_ms": 0.7592960000038147,
+   "vendor_eager_unfused_ms": 1.5129599571228027,
+   "custom_gemm_over_vendor_gemm": 1.1018206241635347,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 17.07024383544922,
+    "rel_tol": 34.14048767089844,
+    "unfused_rel_max_vs_fp32": 0.04986786097288132,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.04986786097288132,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 0.7394002823529411,
+   "est_fused_ms": 0.720896,
+   "estimated_gain": 1.025668449197861,
+   "gemm_drift_ratio": 1.1805385783209734,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1335.0,
+     "min": 1305.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 70.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 24.39,
+     "min": 11.34,
+     "max": 34.86
+    },
+    "n_samples": 11
+   },
+   "est_unfused_ms_adj": 0.7467256505042315,
+   "est_fused_ms_adj": 0.7279946506023407,
+   "estimated_gain_adj": 1.0257295845325138
+  },
+  {
+   "name": "n4c_glm_tpe512",
+   "kind": "n4_custom",
+   "group": "glm_dense",
+   "dims": {
+    "M": 512,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 1.8324480056762695,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "elem": [
+     64,
+     64,
+     2
+    ]
+   },
+   "custom_fused_ms": 1.810431957244873,
+   "custom_fused_cfg": [
+    64,
+    64,
+    64,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0121606605226416,
+   "custom_unfused_same_tile_ms": 1.9824640154838562,
+   "custom_gain_same_tile": 1.0950226588469982,
+   "vendor_gemm_only_ms": 1.5047680139541626,
+   "vendor_eager_unfused_ms": 3.023871898651123,
+   "custom_gemm_over_vendor_gemm": 0.9901327023747062,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 22.03412628173828,
+    "rel_tol": 44.06825256347656,
+    "unfused_rel_max_vs_fp32": 0.056949276477098465,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.056949276477098465,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 1.4788005647058822,
+   "est_fused_ms": 1.441792,
+   "estimated_gain": 1.025668449197861,
+   "gemm_drift_ratio": 1.068384839444871,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1485.0,
+     "min": 1275.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 70.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 25.915,
+     "min": 16.94,
+     "max": 29.58
+    },
+    "n_samples": 12
+   },
+   "est_unfused_ms_adj": 1.493451301008463,
+   "est_fused_ms_adj": 1.4559893012046814,
+   "estimated_gain_adj": 1.0257295845325138
+  },
+  {
+   "name": "n4c_glm_tpe1024",
+   "kind": "n4_custom",
+   "group": "glm_dense",
+   "dims": {
+    "M": 1024,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 3.534335970878601,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "elem": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 3.4759680032730107,
+   "custom_fused_cfg": [
+    64,
+    64,
+    64,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0167918598648291,
+   "custom_unfused_same_tile_ms": 3.7739520072937007,
+   "custom_gain_same_tile": 1.0857269122558393,
+   "vendor_gemm_only_ms": 2.9122560024261475,
+   "vendor_eager_unfused_ms": 5.988351821899414,
+   "custom_gemm_over_vendor_gemm": 1.0305907046049627,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.07803885638713837,
+    "rel_tol": 0.15607771277427673,
+    "unfused_rel_max_vs_fp32": 0.07803885638713837,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.07802474498748779,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 2.892065129411765,
+   "est_fused_ms": 2.818048,
+   "estimated_gain": 1.026265389876881,
+   "gemm_drift_ratio": 1.1765555744351472,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1335.0,
+     "min": 1305.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 70.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 24.3,
+     "min": 23.48,
+     "max": 30.49
+    },
+    "n_samples": 13
+   },
+   "est_unfused_ms_adj": 2.920721270143986,
+   "est_fused_ms_adj": 2.8457972705364227,
+   "estimated_gain_adj": 1.0263279469635027
+  },
+  {
+   "name": "n4c_glm_tpe4096",
+   "kind": "n4_custom",
+   "group": "glm_dense",
+   "dims": {
+    "M": 4096,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 1,
+    "batched": false
+   },
+   "custom_unfused_ms": 13.788671970367432,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "elem": [
+     64,
+     64,
+     2
+    ]
+   },
+   "custom_fused_ms": 15.184895992279055,
+   "custom_fused_cfg": [
+    64,
+    128,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 0.9080517889209415,
+   "custom_unfused_same_tile_ms": 16.141311645507812,
+   "custom_gain_same_tile": 1.062984669352695,
+   "vendor_gemm_only_ms": 11.448832035064697,
+   "vendor_eager_unfused_ms": 26.70643138885498,
+   "custom_gemm_over_vendor_gemm": 1.164259170815955,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.079985111951828,
+    "rel_tol": 0.159970223903656,
+    "unfused_rel_max_vs_fp32": 0.079985111951828,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.07747934758663177,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 11.56826051764706,
+   "est_fused_ms": 11.206656,
+   "estimated_gain": 1.0322669418644652,
+   "gemm_drift_ratio": 1.165744800151278,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1312.5,
+     "min": 1140.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 70.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 28.225,
+     "min": 13.0,
+     "max": 33.28
+    },
+    "n_samples": 22
+   },
+   "est_unfused_ms_adj": 11.682885080575945,
+   "est_fused_ms_adj": 11.317007750272753,
+   "estimated_gain_adj": 1.0323298647820025
+  },
+  {
+   "name": "n4c_glm_grouped_tpe64",
+   "kind": "n4_custom",
+   "group": "glm_grouped",
+   "dims": {
+    "M": 64,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 8,
+    "batched": true
+   },
+   "custom_unfused_ms": 2.616320013999939,
+   "custom_unfused_cfg": {
+    "gemm": [
+     64,
+     128,
+     32,
+     4,
+     3
+    ],
+    "elem": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 2.5871359109878536,
+   "custom_fused_cfg": [
+    16,
+    64,
+    64,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0112804676739777,
+   "custom_unfused_same_tile_ms": 2.7847679853439327,
+   "custom_gain_same_tile": 1.0763902945789257,
+   "vendor_gemm_only_ms": 2.5533440113067627,
+   "vendor_eager_unfused_ms": 5.170176029205322,
+   "custom_gemm_over_vendor_gemm": 0.9805494205565694,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.04464569315314293,
+    "rel_tol": 0.08929138630628586,
+    "unfused_rel_max_vs_fp32": 0.04464569315314293,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.04464569315314293,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 2.4672376470588233,
+   "est_fused_ms": 2.417892894117647,
+   "estimated_gain": 1.020408163265306,
+   "gemm_drift_ratio": 0.9993864983937542,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1327.5,
+     "min": 1305.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 24.465,
+     "min": 14.23,
+     "max": 30.29
+    },
+    "n_samples": 12
+   },
+   "est_unfused_ms_adj": 2.4974666535854344,
+   "est_fused_ms_adj": 2.4475173205137257,
+   "estimated_gain_adj": 1.0204081632653061
+  },
+  {
+   "name": "n4c_glm_grouped_tpe512",
+   "kind": "n4_custom",
+   "group": "glm_grouped",
+   "dims": {
+    "M": 512,
+    "hidden": 6144,
+    "inter": 2048,
+    "count": 8,
+    "batched": true
+   },
+   "custom_unfused_ms": 15.451647758483885,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "elem": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 13.914624214172365,
+   "custom_fused_cfg": [
+    64,
+    128,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.1104610171754425,
+   "custom_unfused_same_tile_ms": 15.50438404083252,
+   "custom_gain_same_tile": 1.1142510068680798,
+   "vendor_gemm_only_ms": 13.323264122009277,
+   "vendor_eager_unfused_ms": 27.240960121154785,
+   "custom_gemm_over_vendor_gemm": 0.9780954163626023,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.06975399702787399,
+    "rel_tol": 0.13950799405574799,
+    "unfused_rel_max_vs_fp32": 0.06975399702787399,
+    "unfused_ok": true,
+    "fused_rel_max_vs_fp32": 0.06928107142448425,
+    "fused_ok": true
+   },
+   "est_unfused_ms": 11.50272451764706,
+   "est_fused_ms": 11.206656,
+   "estimated_gain": 1.0264189886480908,
+   "gemm_drift_ratio": 1.1678846579712974,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1192.5,
+     "min": 1140.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 24.275,
+     "min": 21.74,
+     "max": 30.8
+    },
+    "n_samples": 22
+   },
+   "est_unfused_ms_adj": 11.616703748703005,
+   "est_fused_ms_adj": 11.317007750272753,
+   "estimated_gain_adj": 1.0264819115656283
+  }
+ ]
+}
