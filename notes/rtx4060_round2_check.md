@@ -73,3 +73,22 @@ All 5 tests: numbers_match_json=TRUE (no fabrication; every figure reproduces). 
 
 Verdict UNCHANGED + sharpened -> three-tier realizability hierarchy (memory-bound ~1.0 / GEMM-epilogue ~0.5
 & can-lose / cross-tile unreachable). Integrated into sim_real_synthesis.md.
+
+---
+
+# Round 5 dispatch — residual₂→down (dense) task written
+
+Wrote `RTX4060_RESIDUAL_DOWN_TASK.md` (standalone spec, reuses RTX4060_SIM_REAL_TASK.md §T6.0 infra +
+the N4-custom harness). Closes the one untested residual site: dense residual₂ → down-projection GEMM
+epilogue (`addmm(residual2, x_act, W_down, β=1)`), the same cuBLASLt β-accumulate mechanism F1 proved
+but at the down shape (N=HIDDEN=6144, K=INTERMEDIATE), never run.
+ - Sweeps K∈{2048,6144,12288,16384,24576} (brackets the two F1 points; headline dense = 4×H=24576)
+   × M∈{512..16384 decode, 32768/49152 prefill}; 131072 dropped (8GB arith).
+ - Two baselines (Round-4 lesson): vs-vendor (addmm stock — PRIMARY, needs_custom_kernel expected False)
+   + custom-vs-custom (mechanism isolation, best + same-tile).
+ - Estimator cell is VALID (tile-local residual add, not structure-blind). Precomputed est checked:
+   gain 1.159(K2048) → 1.053(6144) → 1.026(12288) → 1.020(16384) → 1.013(24576) at M=2048.
+ - Expected verdict: stock-fusable via addmm at ~vendor speed, delivered ~1.0; dense-headline benefit
+   ~+1.3% at 4×H (small but FREE), up to +16% at narrow K. Dense counterpart to E-merge.
+Deliverables the remote will produce: rtx4060_residual_down.{py,json}, results-doc addendum + fwd-pointer,
+worklog Round 5. PENDING: file must reach the 4060 (git sync) before it can run.

@@ -10,7 +10,7 @@ decode / +4.6% prefill on H100) **actually materialize on real hardware?**
 |---|---|---|
 | **H100** | analytical estimate | fusion **+6% (decode) / +4.6% (prefill)** |
 | **MetaX C500** | measured (MACA stack) | fusion **≈0% / negative** through the vendor stack; Triton-fused GEMM **3.4× slower** than vendor |
-| **RTX 4060** | measured (mature CUDA stack) | **verdict A** — with a *custom* fused kernel the gain is real (**+2.9–4.2% geomean**, fused kernel at **~vendor GEMM speed**); through *stock* tooling the null reproduces (**0.99**). **But** at LOCKED clocks the estimator **over-predicts the magnitude ~2×** (delivered fraction **≈0.41–0.49**) |
+| **RTX 4060** | measured (mature CUDA stack) | **verdict A** — with a *custom* fused kernel the gain is real (**+2.9–4.2% geomean**, fused kernel at **~vendor GEMM speed**); through *stock* tooling the null reproduces (**0.99**). At LOCKED clocks the estimator over-predicts ~2× **against vendor baselines** — but the **Round-4 N4 custom-vs-custom** re-run (§below) shows that ~2× is **mostly the Triton-vs-cuBLAS kernel-quality gap, not model error**: in the estimator's own regime (both sides custom, same tiling family) delivered fraction is **≈0.88–1.20 (≈1.0)** |
 
 The 4060 result is verified sound across two rounds: est-vs-measured single-GEMM calibration holds
 (geomean 0.94, in the prior band); every headline number traces to the raw JSON; numerics validated
@@ -89,7 +89,7 @@ estimator's prediction is set by the fusion's STRUCTURE, not its size:**
 | tier | fusions | realized | why |
 |---|---|---|---|
 | **Memory-bound** (delivers ~100%) | expert-merge / **r2f** (E) | **1.00–1.07×** the predicted 1.20 | stock `torch.compile` fuses it, **no custom kernel** — no vendor GEMM to lose quality against; estimator was if anything *conservative* |
-| **GEMM-epilogue** (delivers ~0.5, can lose) | SwiGLU (D/L2), residual/RMSNorm-prologue (B, A/S5) | b1 **0.49**, b2 **0.83**, SwiGLU **≤0.99 (no clean win)** | needs a custom kernel (**0/16 forced-template folds** → NOT stock-fusable on this build); the hand kernel can't beat cuBLAS at skinny GLM per-expert M → SwiGLU is **neutral-to-negative** at real decode dims |
+| **GEMM-epilogue** (**vs vendor** ~0.5, can lose; **custom-vs-custom ≈1.0**) | SwiGLU (D/L2), residual/RMSNorm-prologue (B, A/S5) | vs vendor: b1 **0.49**, b2 **0.83**, SwiGLU **≤0.99**; **custom-vs-custom SwiGLU ≈1.0** (Round 4) | vs vendor the hand kernel can't beat cuBLAS at skinny GLM M (**0/16 forced folds** → not stock-fusable) → SwiGLU looks **neutral-to-negative**. **But Round-4 (§Round 4) shows that's the kernel-quality gap: apples-to-apples the SwiGLU mechanism delivers the estimate (even turns positive at GLM dims).** Deployment gate: fuse iff your custom GEMM ≈ cuBLAS |
 | **Cross-tile** (unreachable without CUTLASS) | RMSNorm-**epilogue** (A/S3), top-k (C), F6 two-GEMM chain (D/L3) | **0 (no verified fused realization)** | S3 mla_o-epilogue placement **structurally INFEASIBLE** (3.9× over SMEM); top-k dropped (≤ the ~3.5% ceiling); F6 **estimator-only** — Triton OOMs, its 0.259× crossover cliff is a **CUTLASS-gated hypothesis** |
 
 **Corrections this forces:**
@@ -98,3 +98,46 @@ estimator's prediction is set by the fusion's STRUCTURE, not its size:**
 - **F6's crossover cliff (1.005→0.259→0.15) exists only in the estimator** — Triton couldn't build the on-chip kernel; realizing/testing it needs CUTLASS.
 
 **Net sim-real law:** the roofline estimator is a trustworthy **upper bound whose realized fraction is a function of fusion class** — ~1.0 (memory-bound), ~0.5 and possibly negative (GEMM-epilogue, kernel-quality-limited), 0 (cross-tile, until a CUTLASS backend exists). "Whether to fuse" is well-predicted; "how much you get" depends on whether a vendor-quality fused kernel exists.
+
+## Round 4 — N4 custom-vs-custom: the ~2× decomposes into (kernel-quality gap) + (≈exact model)
+
+The earlier "estimator over-predicts SwiGLU ~2×" and "SwiGLU loses at real GLM dims" both came from
+judging the *custom* fused kernel against a *vendor* baseline (cuBLAS GEMM + eager/compiled epilogue) —
+which conflates the fusion benefit with the Triton-vs-cuBLAS GEMM-quality gap. Round 4 re-ran **N4
+(SwiGLU→up_gate) with both sides from the same custom Triton family** — unfused = plain full-width GEMM
++ separate custom SwiGLU kernel; fused = the dual-accumulator kernel. **This is exactly the estimator's
+regime** (`est_swiglu_ms` assumes the same optimal-mapping GEMM on both sides). Raw: `rtx4060_n4_custom.json`
+(18 configs, numerics 18/18 vs fp32).
+
+| group | n | measured best-vs-best | measured same-tile | est |
+|---|---:|---:|---:|---:|
+| T4 dense | 6 | 1.069 | 1.090 | 1.091 |
+| T4 MoE grouped | 2 | 1.026 | 1.054 | 1.079 |
+| GLM per-expert | 8 | 1.028 | 1.033 | 1.021 |
+| GLM grouped MoE | 2 | 1.060 | 1.095 | 1.023 |
+| **all 18** | 18 | **1.045** | **1.061** | **1.051** |
+
+Delivered fraction (all-18): **0.88 (best-vs-best), 1.20 (same-tile)** — vs 0.4–0.5 in the vendor framing.
+Relaxed drift ≤ 1.10 (n=10, since heavy tuning left only 5/18 strictly drift-clean): **1.073/1.063 measured
+vs 1.064 est — the same agreement.** Kernel-quality gap (custom GEMM / vendor GEMM) geomean **1.02**.
+
+**What this changes:**
+- **The estimator's N4 fusion model is essentially exact in its own regime** — all-18 measured 1.045–1.061
+  vs est 1.051. The "~2× over-prediction" ≈ (vendor-vs-custom GEMM-quality gap) + (small residual model
+  error ≈0.9–1.2× delivered).
+- **N4 is genuinely profitable within a fixed kernel family — including the regimes that looked negative.**
+  The GLM per-expert rows (neutral-to-negative *vs vendor* in T6.D) turn **positive custom-vs-custom
+  (+2.8…+3.3%, est +2.1%)**; the grouped MoE rows (previously untestable) show **+2.6…+9.5% vs est +2.3…+7.9%**.
+- **The realizability tier for SwiGLU is re-read, not overturned:** the *mechanism* delivers the estimate;
+  the *deployment* question is whether your custom GEMM matches vendor quality. Fusing pays **iff** you were
+  already shipping a custom kernel (or your custom GEMM ≈ cuBLAS). Where the unfused path gets cuBLAS and your
+  fused kernel can't beat it (wide T6.D/A shapes), vendor quality wins; where the custom GEMM is at parity
+  (T4 dense) or there's no vendor edge to lose (same-family / skinny shapes), the predicted N4 gain is real
+  and ≈exact. **Same reading applies to the C500:** a MACA-CUTLASS fused kernel vs the same-quality unfused
+  MACA-CUTLASS pair is the custom-vs-custom regime — where the estimator is right.
+
+**Scope:** Round 4 re-ran **only N4 (SwiGLU)** custom-vs-custom. residual₁/merge are already stock-fusable
+(no custom needed, deliver ~1.0); RMSNorm→mla_o-epilogue (S3) and F6 remain **unbuildable** (structural, not
+a baseline artifact); top-k remains unfusable. So the custom-vs-custom correction lifts the *GEMM-epilogue*
+tier's SwiGLU verdict from "~0/negative" to "≈1.0 (estimator-exact) given a vendor-parity custom kernel" —
+the *cross-tile* tier (S3/top-k/F6) is unchanged.
