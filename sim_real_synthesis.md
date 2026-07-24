@@ -141,3 +141,42 @@ vs 1.064 est — the same agreement.** Kernel-quality gap (custom GEMM / vendor 
 a baseline artifact); top-k remains unfusable. So the custom-vs-custom correction lifts the *GEMM-epilogue*
 tier's SwiGLU verdict from "~0/negative" to "≈1.0 (estimator-exact) given a vendor-parity custom kernel" —
 the *cross-tile* tier (S3/top-k/F6) is unchanged.
+
+## Round 5 — residual₂ → dense down-GEMM: stock-fusable, but the stock path barely pays at dense width
+
+The one untested residual site (dense residual₂ → down-projection GEMM epilogue) was measured (40 configs,
+K∈{2048…24576} × M∈{512…49152}, locked clocks). Raw: `rtx4060_residual_down.json`. Three distinct gain
+metrics must be kept apart (the machine correctly flagged that `measured_gain_verified` conflates two effects):
+
+| K (dense width) | est | **stock `addmm`** (same cuBLAS both sides — honest deployment) | **custom same-tile** (mechanism, estimator's regime) | stock-fusable? |
+|---|---:|---:|---:|:--:|
+| 2048 (narrow) | 1.159 | 1.038 | 1.114 | ✅ |
+| 6144 (=H) | 1.053 | 1.013 | 1.047 | ✅ |
+| 12288 (2×H) | 1.026 | 1.007 | 1.020 | ✅ |
+| 16384 (=KV) | 1.020 | 1.010 | 1.019 | ✅ |
+| **24576 (4×H, dense headline)** | **1.013** | **0.995 (net loss)** | **1.022** | ✅ |
+| **overall (n=31 clean)** | **1.049** | **1.012** (delivered 0.25) | **1.040** (delivered 0.82) | ✅ all 40 |
+
+**Findings:**
+1. **Realizability CONFIRMED — it IS stock-fusable.** `addmm` (cuBLASLt β=1 accumulate) fuses the residual on
+   **all 40 configs**, profiler-verified, no separate add kernel → `needs_custom_kernel = False`. The design
+   prediction held; it's the dense analogue of E-merge in *buildability*.
+2. **But the stock path barely pays, and LOSES at realistic dense width.** Same-library `addmm` delivers only
+   ~+1.2% overall (delivered 0.25) and is **neutral-to-negative at K=24576** (per-K geomean 0.995; the large-M
+   prefill rows M32768/M49152 are 0.95/0.78 — cuBLASLt's β≠0 path picks a worse kernel / eats the small saving
+   at compute-bound width). So "addmm gives the residual fusion for free" is mechanically true but **nets ≈0** at
+   a real dense FFN.
+3. **The estimator's MODEL is right; the shortfall is a cuBLASLt implementation gap, not model error.** The
+   custom same-tile kernel (hand-fused store = the estimator's regime) delivers **~82%** of the estimate and wins
+   at *every* K including dense (K=24576: +2.2%). So to actually capture the predicted gain at dense width you
+   need a custom fused epilogue — cuBLASLt `addmm` under-realizes it. Same lesson as N4/SwiGLU, milder.
+4. **Honesty flag (machine-disclosed):** `measured_gain_verified` is inflated at large M/K (e.g. M32768/K16384=1.25,
+   K24576=1.23) by a **GEMM-quality inversion** — the forced Triton template beats cuBLAS by 16–19% there, which
+   is a faster GEMM, NOT residual-fusion benefit. The honest fusion numbers are `addmm` (stock) and custom same-tile
+   (mechanism); `measured_gain_verified` is not used for the verdict.
+
+**Placement in the hierarchy:** residual₂→down is a NEW middle case — **stock-fusable (tier 1 buildability) but
+tier-2 in delivered benefit at dense width** (compute-bound, β-path overhead). It sits between E-merge (stock-fusable
+AND stock-delivers, memory-bound) and SwiGLU (not stock-fusable). Net dense-model takeaway: **the residual₂→down
+saving is real but ~+1% at 4×H and cuBLASLt's `addmm` won't even give you that — capturing it needs a hand-fused
+store; it's not worth a custom kernel unless the FFN is narrow (K≲H, where it reaches +5–13%).**
