@@ -1,0 +1,6840 @@
+{
+ "conventions": {
+  "units": "ms for *_ms; gain = unfused/fused (>1 => fusion faster)",
+  "best_unfused_ms": "min(eager mm+add, vendor mm + compiled-add clean variant)",
+  "measured_gain_verified": "best_unfused / best VERIFIED-fused (addmm iff profiler shows no separate add kernel + numerics; compiled/nocg/forced iff template- or vendor-fused per evidence + numerics; custom triton fused iff numerics)",
+  "needs_custom_kernel": "False iff a STOCK path (addmm/compiled/nocg/forced) is verified-fused",
+  "custom_gain_*": "custom-vs-custom within one Triton tiling family (Round-4 lesson): best-vs-best and same-tile (unfused GEMM forced onto the fused kernel's tile)",
+  "timing": "median of 30 cuda events after 15 warmup + clock warmer; drift probe = bare vendor mm re-measured at config END",
+  "numerics": "rel-vs-fp32 <= max(2*eager_rel, 5e-2) on a min(M,4096)-row slice"
+ },
+ "env": {
+  "task": "Round 5: residual2 -> dense down-GEMM epilogue (RTX4060_RESIDUAL_DOWN_TASK.md)",
+  "torch": "2.11.0+cu130",
+  "triton": "3.6.0",
+  "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "clocks_locked": true,
+  "clocks_note": "clocks LOCKED 1500/5501 by host; ClockSampler per config",
+  "sweep": "core-full + light rest (host decision): all 6 paths on 5K x M in {2048,8192,32768}; light rows skip the whole-fn compile variants (null with reason)",
+  "M_131072_dropped": "x_act[131072,24576] bf16 = 6.4 GB alone > 8 GB; covered by the per-K M-independence assertion (M in {512,8192,32768})",
+  "estimator_cell": "VALID (tile-local epilogue) - NOT structure-blind",
+  "est_sanity": {
+   "gain_2048_2048": 1.1588235294117648,
+   "gain_2048_24576": 1.0132352941176472,
+   "anchors_ok": true
+  },
+  "smoke": false,
+  "adjusted_profile": {
+   "applied": {
+    "clock_hz": 1485373551.996981,
+    "bw_bytes_per_s": 167942342452.44226
+   },
+   "source": "t2 adjusted_profile block",
+   "check_peak_tflops": 18.252270206938903,
+   "check_bw_gbs": 167.94234245244226
+  }
+ },
+ "configs": [
+  {
+   "name": "r5_M512_K2048",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 512,
+    "N": 6144,
+    "K": 2048
+   },
+   "vendor_gemm_only_ms": 0.7551999986171722,
+   "vendor_eager_unfused_ms": 0.8191840052604675,
+   "clean_unfused_ms": 0.8129760026931763,
+   "best_unfused_ms": 0.8129760026931763,
+   "addmm_ms": 0.8073280155658721,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 0.7864959836006165,
+   "best_fused_ms": 0.7864959836006165,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 716.718,
+     "avg_us": 716.718
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 53.702,
+     "avg_us": 53.702
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.033668346240413,
+   "measured_gain_verified": 1.033668346240413,
+   "custom_unfused_ms": 0.8592960238456726,
+   "custom_unfused_cfg": {
+    "gemm": [
+     32,
+     64,
+     32,
+     4,
+     2
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 0.7864959836006165,
+   "custom_fused_cfg": [
+    128,
+    64,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0925625073274678,
+   "custom_unfused_same_tile_ms": 0.825439989566803,
+   "custom_gain_same_tile": 1.0495158357807486,
+   "custom_gemm_over_vendor_gemm": 0.9951694744661145,
+   "est_unfused_ms": 0.8100763607843138,
+   "est_fused_ms": 0.6990506666666666,
+   "estimated_gain": 1.1588235294117648,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.01038361806422472,
+    "rel_tol": 0.05,
+    "rows_checked": 512,
+    "addmm_rel": 0.0038538440130650997,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038538440130650997,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.01038361806422472,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.009766929816596,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 68.0,
+     "min": 64.0,
+     "max": 70.0
+    },
+    "power_w": {
+     "median": 22.2,
+     "min": 10.26,
+     "max": 26.75
+    },
+    "n_samples": 18
+   },
+   "est_unfused_ms_adj": 0.8183202060560386,
+   "est_fused_ms_adj": 0.7059342066446941,
+   "estimated_gain_adj": 1.159201804294929,
+   "addmm_gain": 1.0069959013169454
+  },
+  {
+   "name": "r5_M1024_K2048",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 1024,
+    "N": 6144,
+    "K": 2048
+   },
+   "vendor_gemm_only_ms": 1.4655680060386655,
+   "vendor_eager_unfused_ms": 1.650592029094696,
+   "clean_unfused_ms": 1.6563999652862549,
+   "best_unfused_ms": 1.650592029094696,
+   "addmm_ms": 1.6141600012779236,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 1.520591974258423,
+   "best_fused_ms": 1.520591974258423,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 1420.927,
+     "avg_us": 1420.927
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 122.76,
+     "avg_us": 122.76
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0854930560183134,
+   "measured_gain_verified": 1.0854930560183134,
+   "custom_unfused_ms": 1.6837120056152344,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 1.520591974258423,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.1072740315076064,
+   "custom_unfused_same_tile_ms": 1.674624025821686,
+   "custom_gain_same_tile": 1.1012974250626193,
+   "custom_gemm_over_vendor_gemm": 1.0515949735301366,
+   "est_unfused_ms": 1.6201527215686276,
+   "est_fused_ms": 1.3981013333333332,
+   "estimated_gain": 1.1588235294117648,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.010229561477899551,
+    "rel_tol": 0.05,
+    "rows_checked": 1024,
+    "addmm_rel": 0.0038627644535154104,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038627644535154104,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.010229561477899551,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 0.9969650015570508,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1500.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 70.0,
+     "min": 66.0,
+     "max": 71.0
+    },
+    "power_w": {
+     "median": 27.505000000000003,
+     "min": 10.47,
+     "max": 28.51
+    },
+    "n_samples": 14
+   },
+   "est_unfused_ms_adj": 1.6366404121120772,
+   "est_fused_ms_adj": 1.4118684132893882,
+   "estimated_gain_adj": 1.159201804294929,
+   "addmm_gain": 1.0225702704737631
+  },
+  {
+   "name": "r5_M2048_K2048",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 2048,
+    "N": 6144,
+    "K": 2048
+   },
+   "vendor_gemm_only_ms": 2.859472036361694,
+   "vendor_eager_unfused_ms": 3.286080002784729,
+   "clean_unfused_ms": 3.2875839471817017,
+   "best_unfused_ms": 3.286080002784729,
+   "addmm_ms": 3.1086720228195186,
+   "compiled_ms": 3.8408799171447754,
+   "nocg_ms": 3.177136063575745,
+   "forced_ms": 2.8441920280456543,
+   "triton_ms": 2.9869920015335083,
+   "best_fused_ms": 2.8441920280456543,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 2843.116,
+     "avg_us": 2843.116
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 234.795,
+     "avg_us": 234.795
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 2839.152,
+      "avg_us": 2839.152
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 2,
+      "total_us": 666.963,
+      "avg_us": 333.481
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 304.26,
+      "avg_us": 304.26
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 2840.277,
+      "avg_us": 2840.277
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 227.711,
+      "avg_us": 227.711
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 2840.448,
+      "avg_us": 2840.448
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.7451,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 2,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9258,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 666.963,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.1553650282335934,
+   "measured_gain_verified": 1.1553650282335934,
+   "custom_unfused_ms": 3.3545440435409546,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 2.9869920015335083,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.1230508959577885,
+   "custom_unfused_same_tile_ms": 3.376400113105774,
+   "custom_gain_same_tile": 1.1303679793492398,
+   "custom_gemm_over_vendor_gemm": 1.0186496096425606,
+   "est_unfused_ms": 3.240305443137255,
+   "est_fused_ms": 2.7962026666666664,
+   "estimated_gain": 1.1588235294117648,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.012074709869921207,
+    "rel_tol": 0.05,
+    "rows_checked": 2048,
+    "addmm_rel": 0.00385806942358613,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.00385806942358613,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.012074709869921207,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0032117410312842,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1365.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 68.0,
+     "min": 66.0,
+     "max": 71.0
+    },
+    "power_w": {
+     "median": 18.37,
+     "min": 10.41,
+     "max": 30.49
+    },
+    "n_samples": 33
+   },
+   "est_unfused_ms_adj": 3.2732808242241545,
+   "est_fused_ms_adj": 2.8237368265787763,
+   "estimated_gain_adj": 1.159201804294929,
+   "addmm_gain": 1.0570687350299193
+  },
+  {
+   "name": "r5_M4096_K2048",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 4096,
+    "N": 6144,
+    "K": 2048
+   },
+   "vendor_gemm_only_ms": 5.659711837768555,
+   "vendor_eager_unfused_ms": 6.597120046615601,
+   "clean_unfused_ms": 6.594079971313477,
+   "best_unfused_ms": 6.594079971313477,
+   "addmm_ms": 6.275920152664185,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 5.843360185623168,
+   "best_fused_ms": 5.843360185623168,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 5660.267,
+     "avg_us": 5660.267
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 501.886,
+     "avg_us": 501.886
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.1284739878841215,
+   "measured_gain_verified": 1.1284739878841215,
+   "custom_unfused_ms": 6.891024112701417,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 5.843360185623168,
+   "custom_fused_cfg": [
+    128,
+    64,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.1792913484361087,
+   "custom_unfused_same_tile_ms": 6.7379679679870605,
+   "custom_gain_same_tile": 1.1530981753555016,
+   "custom_gemm_over_vendor_gemm": 1.0297683700336904,
+   "est_unfused_ms": 6.48061088627451,
+   "est_fused_ms": 5.592405333333333,
+   "estimated_gain": 1.1588235294117648,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.012636136263608932,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.0038620601408183575,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038620601408183575,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.012636136263608932,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.0169648510995954,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1380.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 71.0,
+     "min": 67.0,
+     "max": 72.0
+    },
+    "power_w": {
+     "median": 28.75,
+     "min": 11.88,
+     "max": 32.46
+    },
+    "n_samples": 18
+   },
+   "est_unfused_ms_adj": 6.546561648448309,
+   "est_fused_ms_adj": 5.647473653157553,
+   "estimated_gain_adj": 1.159201804294929,
+   "addmm_gain": 1.0506953260892318
+  },
+  {
+   "name": "r5_M8192_K2048",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 8192,
+    "N": 6144,
+    "K": 2048
+   },
+   "vendor_gemm_only_ms": 11.373072147369385,
+   "vendor_eager_unfused_ms": 13.297679901123047,
+   "clean_unfused_ms": 13.298912048339844,
+   "best_unfused_ms": 13.297679901123047,
+   "addmm_ms": 12.615983963012695,
+   "compiled_ms": 14.844480037689209,
+   "nocg_ms": 12.770416259765625,
+   "forced_ms": 12.015039920806883,
+   "triton_ms": 12.012207984924316,
+   "best_fused_ms": 12.012207984924316,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 11306.955,
+     "avg_us": 11306.955
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 1150.87,
+     "avg_us": 1150.87
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 11313.957,
+      "avg_us": 11313.957
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 4,
+      "total_us": 1974.311,
+      "avg_us": 493.578
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1495.752,
+      "avg_us": 1495.752
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 11306.935,
+      "avg_us": 11306.935
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1187.677,
+      "avg_us": 1187.677
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 11803.186,
+      "avg_us": 11803.186
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.7653,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 2,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9049,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 1974.311,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.1070137911208362,
+   "measured_gain_verified": 1.1070137911208362,
+   "custom_unfused_ms": 13.638383865356445,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 12.012207984924316,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.1353769334058341,
+   "custom_unfused_same_tile_ms": 13.52843189239502,
+   "custom_gain_same_tile": 1.1262235809914056,
+   "custom_gemm_over_vendor_gemm": 1.0323613695843552,
+   "est_unfused_ms": 12.96122177254902,
+   "est_fused_ms": 11.184810666666666,
+   "estimated_gain": 1.1588235294117648,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.012757431715726852,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.003862881800159812,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.003862881800159812,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.012757431715726852,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0055992058382643,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1110.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 71.0,
+     "min": 67.0,
+     "max": 73.0
+    },
+    "power_w": {
+     "median": 28.32,
+     "min": 11.16,
+     "max": 34.54
+    },
+    "n_samples": 46
+   },
+   "est_unfused_ms_adj": 13.093123296896618,
+   "est_fused_ms_adj": 11.294947306315105,
+   "estimated_gain_adj": 1.159201804294929,
+   "addmm_gain": 1.0540343060128274
+  },
+  {
+   "name": "r5_M16384_K2048",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 16384,
+    "N": 6144,
+    "K": 2048
+   },
+   "vendor_gemm_only_ms": 22.7498722076416,
+   "vendor_eager_unfused_ms": 26.708544731140137,
+   "clean_unfused_ms": 26.632272720336914,
+   "best_unfused_ms": 26.632272720336914,
+   "addmm_ms": 25.296784400939945,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 26.518704414367676,
+   "best_fused_ms": 25.296784400939945,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 22614.253,
+     "avg_us": 22614.253
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 2435.185,
+     "avg_us": 2435.185
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0527928094824315,
+   "measured_gain_verified": 1.0527928094824315,
+   "custom_unfused_ms": 28.76568031311035,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 26.518704414367676,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0847317374043839,
+   "custom_unfused_same_tile_ms": 29.146944046020508,
+   "custom_gain_same_tile": 1.0991089002911043,
+   "custom_gemm_over_vendor_gemm": 1.0906870979087377,
+   "est_unfused_ms": 25.92244354509804,
+   "est_fused_ms": 22.36962133333333,
+   "estimated_gain": 1.1588235294117648,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.012761769816279411,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.0038610037881881,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038610037881881,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.012761769816279411,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.1798030347554407,
+   "drift_clean": false,
+   "excluded_from_aggregate": true,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1020.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 73.0,
+     "min": 68.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 31.83,
+     "min": 19.49,
+     "max": 35.25
+    },
+    "n_samples": 39
+   },
+   "est_unfused_ms_adj": 26.186246593793236,
+   "est_fused_ms_adj": 22.58989461263021,
+   "estimated_gain_adj": 1.159201804294929,
+   "addmm_gain": 1.0527928094824315
+  },
+  {
+   "name": "r5_M32768_K2048",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": true,
+   "dims": {
+    "M": 32768,
+    "N": 6144,
+    "K": 2048
+   },
+   "vendor_gemm_only_ms": 45.356496810913086,
+   "vendor_eager_unfused_ms": 57.832096099853516,
+   "clean_unfused_ms": 56.08987236022949,
+   "best_unfused_ms": 56.08987236022949,
+   "addmm_ms": 56.55663871765137,
+   "compiled_ms": 65.15456008911133,
+   "nocg_ms": 55.5479679107666,
+   "forced_ms": 51.969871520996094,
+   "triton_ms": 60.92633628845215,
+   "best_fused_ms": 51.969871520996094,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 47508.704,
+     "avg_us": 47508.704
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 5104.91,
+     "avg_us": 5104.91
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 48394.778,
+      "avg_us": 48394.778
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 14,
+      "total_us": 7399.022,
+      "avg_us": 528.502
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5357.142,
+      "avg_us": 5357.142
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 54086.391,
+      "avg_us": 54086.391
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5317.087,
+      "avg_us": 5317.087
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 49707.34,
+      "avg_us": 49707.34
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.7914,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 2,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9105,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 7399.022,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0792767178107974,
+   "measured_gain_verified": 1.0792767178107974,
+   "custom_unfused_ms": 67.03224182128906,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 60.92633628845215,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.1002178352548373,
+   "custom_unfused_same_tile_ms": 68.70647811889648,
+   "custom_gain_same_tile": 1.1276975164501886,
+   "custom_gemm_over_vendor_gemm": 1.2892332829279491,
+   "est_unfused_ms": 51.84488709019608,
+   "est_fused_ms": 44.73924266666666,
+   "estimated_gain": 1.1588235294117648,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.011990311555564404,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.0038637034595012665,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038637034595012665,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.011990311555564404,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.3155351121181629,
+   "drift_clean": false,
+   "excluded_from_aggregate": true,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1305.0,
+     "min": 1020.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 70.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 28.799999999999997,
+     "min": 11.53,
+     "max": 34.82
+    },
+    "n_samples": 114
+   },
+   "est_unfused_ms_adj": 52.37249318758647,
+   "est_fused_ms_adj": 45.17978922526042,
+   "estimated_gain_adj": 1.159201804294929,
+   "addmm_gain": 0.9917469218821132
+  },
+  {
+   "name": "r5_M49152_K2048",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": false,
+   "dims": {
+    "M": 49152,
+    "N": 6144,
+    "K": 2048
+   },
+   "vendor_gemm_only_ms": 89.25548934936523,
+   "vendor_eager_unfused_ms": 100.83380889892578,
+   "clean_unfused_ms": 101.047119140625,
+   "best_unfused_ms": 100.83380889892578,
+   "addmm_ms": 97.31752014160156,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 91.31192016601562,
+   "best_fused_ms": 91.31192016601562,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 79222.756,
+     "avg_us": 79222.756
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 7886.667,
+     "avg_us": 7886.667
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.1042787044188564,
+   "measured_gain_verified": 1.1042787044188564,
+   "custom_unfused_ms": 102.95971298217773,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 91.31192016601562,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.1275604849288579,
+   "custom_unfused_same_tile_ms": 102.9281120300293,
+   "custom_gain_same_tile": 1.1272144079644157,
+   "custom_gemm_over_vendor_gemm": 1.0242224148424952,
+   "est_unfused_ms": 77.76733063529412,
+   "est_fused_ms": 67.10886400000001,
+   "estimated_gain": 1.1588235294117646,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.009772224351763725,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.0038622950669378042,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038622950669378042,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.009772224351763725,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.0020940865742411,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 885.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 76.0
+    },
+    "power_w": {
+     "median": 27.78,
+     "min": 21.17,
+     "max": 35.21
+    },
+    "n_samples": 108
+   },
+   "est_unfused_ms_adj": 78.5587397813797,
+   "est_fused_ms_adj": 67.76968383789062,
+   "estimated_gain_adj": 1.1592018042949288,
+   "addmm_gain": 1.036132124536341
+  },
+  {
+   "name": "r5_M512_K6144",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 512,
+    "N": 6144,
+    "K": 6144
+   },
+   "vendor_gemm_only_ms": 2.5110720396041866,
+   "vendor_eager_unfused_ms": 2.922207951545715,
+   "clean_unfused_ms": 2.906175971031189,
+   "best_unfused_ms": 2.906175971031189,
+   "addmm_ms": 2.8514879941940308,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 2.892959952354431,
+   "best_fused_ms": 2.8514879941940308,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 2785.367,
+     "avg_us": 2785.367
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 59.569,
+     "avg_us": 59.569
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0191787505149976,
+   "measured_gain_verified": 1.0191787505149976,
+   "custom_unfused_ms": 2.9578720331192017,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 2.892959952354431,
+   "custom_fused_cfg": [
+    128,
+    64,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0224379465439686,
+   "custom_unfused_same_tile_ms": 2.9675040245056152,
+   "custom_gain_same_tile": 1.0257674054874202,
+   "custom_gemm_over_vendor_gemm": 1.1326859123775619,
+   "est_unfused_ms": 2.208177694117647,
+   "est_fused_ms": 2.0971520000000003,
+   "estimated_gain": 1.052941176470588,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.009748144075274467,
+    "rel_tol": 0.05,
+    "rows_checked": 512,
+    "addmm_rel": 0.0038756155408918858,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038756155408918858,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.009748144075274467,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.157185448300709,
+   "drift_clean": false,
+   "excluded_from_aggregate": true,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 1140.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 72.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 21.174999999999997,
+     "min": 13.04,
+     "max": 22.35
+    },
+    "n_samples": 14
+   },
+   "est_unfused_ms_adj": 2.2301886193454266,
+   "est_fused_ms_adj": 2.117802619934082,
+   "estimated_gain_adj": 1.0530672680983095,
+   "addmm_gain": 1.0191787505149976
+  },
+  {
+   "name": "r5_M1024_K6144",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 1024,
+    "N": 6144,
+    "K": 6144
+   },
+   "vendor_gemm_only_ms": 4.804784059524536,
+   "vendor_eager_unfused_ms": 4.9617600440979,
+   "clean_unfused_ms": 4.96017599105835,
+   "best_unfused_ms": 4.96017599105835,
+   "addmm_ms": 5.659071922302246,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 5.736288070678711,
+   "best_fused_ms": 5.659071922302246,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 5555.98,
+     "avg_us": 5555.98
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 105.646,
+     "avg_us": 105.646
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 0.8764999030159757,
+   "measured_gain_verified": 0.8764999030159757,
+   "custom_unfused_ms": 6.102047920227051,
+   "custom_unfused_cfg": {
+    "gemm": [
+     64,
+     64,
+     32,
+     4,
+     2
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 5.736288070678711,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.063762461899,
+   "custom_unfused_same_tile_ms": 5.893280029296875,
+   "custom_gain_same_tile": 1.027368213849063,
+   "custom_gemm_over_vendor_gemm": 1.044712117095827,
+   "est_unfused_ms": 4.416355388235294,
+   "est_fused_ms": 4.194304000000001,
+   "estimated_gain": 1.052941176470588,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.008278162218630314,
+    "rel_tol": 0.05,
+    "rows_checked": 1024,
+    "addmm_rel": 0.003879857249557972,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.003879857249557972,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.008278162218630314,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.1722482691546678,
+   "drift_clean": false,
+   "excluded_from_aggregate": true,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 1140.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 22.12,
+     "min": 13.31,
+     "max": 26.62
+    },
+    "n_samples": 17
+   },
+   "est_unfused_ms_adj": 4.460377238690853,
+   "est_fused_ms_adj": 4.235605239868164,
+   "estimated_gain_adj": 1.0530672680983095,
+   "addmm_gain": 0.8764999030159757
+  },
+  {
+   "name": "r5_M2048_K6144",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 2048,
+    "N": 6144,
+    "K": 6144
+   },
+   "vendor_gemm_only_ms": 8.44651222229004,
+   "vendor_eager_unfused_ms": 10.591696262359617,
+   "clean_unfused_ms": 10.566479682922363,
+   "best_unfused_ms": 10.566479682922363,
+   "addmm_ms": 10.387728214263916,
+   "compiled_ms": 11.683615684509277,
+   "nocg_ms": 10.35489559173584,
+   "forced_ms": 8.666352272033693,
+   "triton_ms": 9.99900817871094,
+   "best_fused_ms": 8.666352272033693,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 10169.742,
+     "avg_us": 10169.742
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 216.485,
+     "avg_us": 216.485
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 9742.863,
+      "avg_us": 9742.863
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 3,
+      "total_us": 1697.634,
+      "avg_us": 565.878
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 303.604,
+      "avg_us": 303.604
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 9928.949,
+      "avg_us": 9928.949
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 228.014,
+      "avg_us": 228.014
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 8461.091,
+      "avg_us": 8461.091
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.8296,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 2,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9776,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 1697.634,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.2192534241909805,
+   "measured_gain_verified": 1.2192534241909805,
+   "custom_unfused_ms": 10.72657585144043,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 9.99900817871094,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0727639841598058,
+   "custom_unfused_same_tile_ms": 10.292975902557371,
+   "custom_gain_same_tile": 1.029399688308319,
+   "custom_gemm_over_vendor_gemm": 1.0156940252754658,
+   "est_unfused_ms": 8.832710776470588,
+   "est_fused_ms": 8.388608000000001,
+   "estimated_gain": 1.052941176470588,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.01063856203109026,
+    "rel_tol": 0.05,
+    "rows_checked": 2048,
+    "addmm_rel": 0.003881860291585326,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.003881860291585326,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.01063856203109026,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.220411920318941,
+   "drift_clean": false,
+   "excluded_from_aggregate": true,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1425.0,
+     "min": 1140.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 70.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 24.26,
+     "min": 11.11,
+     "max": 32.59
+    },
+    "n_samples": 39
+   },
+   "est_unfused_ms_adj": 8.920754477381706,
+   "est_fused_ms_adj": 8.471210479736328,
+   "estimated_gain_adj": 1.0530672680983095,
+   "addmm_gain": 1.0172079462391974
+  },
+  {
+   "name": "r5_M4096_K6144",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 4096,
+    "N": 6144,
+    "K": 6144
+   },
+   "vendor_gemm_only_ms": 17.031392097473148,
+   "vendor_eager_unfused_ms": 19.94267177581787,
+   "clean_unfused_ms": 20.04843235015869,
+   "best_unfused_ms": 19.94267177581787,
+   "addmm_ms": 19.92793560028076,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 22.70577621459961,
+   "best_fused_ms": 19.92793560028076,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 18070.249,
+     "avg_us": 18070.249
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 565.324,
+     "avg_us": 565.324
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.000739473261691,
+   "measured_gain_verified": 1.000739473261691,
+   "custom_unfused_ms": 23.711600303649902,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 22.70577621459961,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0442981591795817,
+   "custom_unfused_same_tile_ms": 23.74116802215576,
+   "custom_gain_same_tile": 1.045600370485921,
+   "custom_gemm_over_vendor_gemm": 1.2431331962461563,
+   "est_unfused_ms": 17.665421552941176,
+   "est_fused_ms": 16.777216000000003,
+   "estimated_gain": 1.052941176470588,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.014576870016753674,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.0038758511655032635,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038758511655032635,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.014576870016753674,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.3130501762473423,
+   "drift_clean": false,
+   "excluded_from_aggregate": true,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 990.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 28.17,
+     "min": 23.65,
+     "max": 32.1
+    },
+    "n_samples": 32
+   },
+   "est_unfused_ms_adj": 17.841508954763412,
+   "est_fused_ms_adj": 16.942420959472656,
+   "estimated_gain_adj": 1.0530672680983095,
+   "addmm_gain": 1.000739473261691
+  },
+  {
+   "name": "r5_M8192_K6144",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 8192,
+    "N": 6144,
+    "K": 6144
+   },
+   "vendor_gemm_only_ms": 39.65571212768555,
+   "vendor_eager_unfused_ms": 41.43956756591797,
+   "clean_unfused_ms": 46.329423904418945,
+   "best_unfused_ms": 41.43956756591797,
+   "addmm_ms": 45.71444892883301,
+   "compiled_ms": 49.77873611450195,
+   "nocg_ms": 46.015487670898445,
+   "forced_ms": 38.88571166992187,
+   "triton_ms": 45.27656173706055,
+   "best_fused_ms": 38.88571166992187,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 44731.986,
+     "avg_us": 44731.986
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 1372.167,
+     "avg_us": 1372.167
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 44385.047,
+      "avg_us": 44385.047
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 7,
+      "total_us": 3698.479,
+      "avg_us": 528.354
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1276.176,
+      "avg_us": 1276.176
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 44277.308,
+      "avg_us": 44277.308
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1385.64,
+      "avg_us": 1385.64
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 37248.224,
+      "avg_us": 37248.224
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.8992,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 2,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9697,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 3698.479,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0656759459020397,
+   "measured_gain_verified": 1.0656759459020397,
+   "custom_unfused_ms": 48.78958511352539,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 45.27656173706055,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0775903302213274,
+   "custom_unfused_same_tile_ms": 47.30188941955567,
+   "custom_gain_same_tile": 1.044732364932148,
+   "custom_gemm_over_vendor_gemm": 1.0766315678494565,
+   "est_unfused_ms": 35.33084310588235,
+   "est_fused_ms": 33.554432000000006,
+   "estimated_gain": 1.052941176470588,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.010821274481713772,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.00387761858291924,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.00387761858291924,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.010821274481713772,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.1232165492265074,
+   "drift_clean": false,
+   "excluded_from_aggregate": true,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 990.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 74.0,
+     "min": 71.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 25.62,
+     "min": 11.33,
+     "max": 35.86
+    },
+    "n_samples": 89
+   },
+   "est_unfused_ms_adj": 35.683017909526825,
+   "est_fused_ms_adj": 33.88484191894531,
+   "estimated_gain_adj": 1.0530672680983095,
+   "addmm_gain": 0.9064873040563158
+  },
+  {
+   "name": "r5_M16384_K6144",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 16384,
+    "N": 6144,
+    "K": 6144
+   },
+   "vendor_gemm_only_ms": 88.92572784423827,
+   "vendor_eager_unfused_ms": 92.6815071105957,
+   "clean_unfused_ms": 92.68349075317384,
+   "best_unfused_ms": 92.6815071105957,
+   "addmm_ms": 91.375919342041,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 90.35559844970703,
+   "best_fused_ms": 90.35559844970703,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 88752.178,
+     "avg_us": 88752.178
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 2589.447,
+     "avg_us": 2589.447
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0257417216065843,
+   "measured_gain_verified": 1.0257417216065843,
+   "custom_unfused_ms": 94.60467147827148,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 90.35559844970703,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0470261179325764,
+   "custom_unfused_same_tile_ms": 94.60990142822264,
+   "custom_gain_same_tile": 1.047083999790933,
+   "custom_gemm_over_vendor_gemm": 1.0214701459109226,
+   "est_unfused_ms": 70.6616862117647,
+   "est_fused_ms": 67.10886400000001,
+   "estimated_gain": 1.052941176470588,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.013681360520422459,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.0038787969388067722,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038787969388067722,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.013681360520422459,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 0.9995919154561046,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 855.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 72.0,
+     "max": 76.0
+    },
+    "power_w": {
+     "median": 27.95,
+     "min": 20.52,
+     "max": 35.83
+    },
+    "n_samples": 102
+   },
+   "est_unfused_ms_adj": 71.36603581905365,
+   "est_fused_ms_adj": 67.76968383789062,
+   "estimated_gain_adj": 1.0530672680983095,
+   "addmm_gain": 1.0142880944777977
+  },
+  {
+   "name": "r5_M32768_K6144",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": true,
+   "dims": {
+    "M": 32768,
+    "N": 6144,
+    "K": 6144
+   },
+   "vendor_gemm_only_ms": 177.6433563232422,
+   "vendor_eager_unfused_ms": 185.70497131347656,
+   "clean_unfused_ms": 185.33870697021484,
+   "best_unfused_ms": 185.33870697021484,
+   "addmm_ms": 182.96654510498044,
+   "compiled_ms": 195.22780609130857,
+   "nocg_ms": 183.21402740478516,
+   "forced_ms": 178.8264923095703,
+   "triton_ms": 180.5597457885742,
+   "best_fused_ms": 178.8264923095703,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 178867.802,
+     "avg_us": 178867.802
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 5886.731,
+     "avg_us": 5886.731
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 179824.783,
+      "avg_us": 179824.783
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 21,
+      "total_us": 11750.558,
+      "avg_us": 559.55
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5388.84,
+      "avg_us": 5388.84
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 177489.355,
+      "avg_us": 177489.355
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5276.677,
+      "avg_us": 5276.677
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 178428.432,
+      "avg_us": 178428.432
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.913,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 2,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9711,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 11750.558,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0364163865014535,
+   "measured_gain_verified": 1.0364163865014535,
+   "custom_unfused_ms": 189.1236343383789,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 180.5597457885742,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0474296666314127,
+   "custom_unfused_same_tile_ms": 189.0098419189453,
+   "custom_gain_same_tile": 1.0467994463188142,
+   "custom_gemm_over_vendor_gemm": 1.0206357393703076,
+   "est_unfused_ms": 141.3233724235294,
+   "est_fused_ms": 134.21772800000002,
+   "estimated_gain": 1.052941176470588,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.009968848899006844,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.003877500770613551,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.003877500770613551,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.009968848899006844,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0001162167954314,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 855.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 72.0,
+     "max": 78.0
+    },
+    "power_w": {
+     "median": 25.17,
+     "min": 10.86,
+     "max": 35.94
+    },
+    "n_samples": 298
+   },
+   "est_unfused_ms_adj": 142.7320716381073,
+   "est_fused_ms_adj": 135.53936767578125,
+   "estimated_gain_adj": 1.0530672680983095,
+   "addmm_gain": 1.0129650033227295
+  },
+  {
+   "name": "r5_M49152_K6144",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": false,
+   "dims": {
+    "M": 49152,
+    "N": 6144,
+    "K": 6144
+   },
+   "vendor_gemm_only_ms": 267.9166107177734,
+   "vendor_eager_unfused_ms": 279.35203552246094,
+   "clean_unfused_ms": 279.63111877441406,
+   "best_unfused_ms": 279.35203552246094,
+   "addmm_ms": 276.01805114746094,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 271.7255401611328,
+   "best_fused_ms": 271.7255401611328,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 266245.556,
+     "avg_us": 266245.556
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 8083.063,
+     "avg_us": 8083.063
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.028066906617632,
+   "measured_gain_verified": 1.028066906617632,
+   "custom_unfused_ms": 284.90576171875,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 271.7255401611328,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0485056412062013,
+   "custom_unfused_same_tile_ms": 284.2300262451172,
+   "custom_gain_same_tile": 1.0460188102913301,
+   "custom_gemm_over_vendor_gemm": 1.0184324881452713,
+   "est_unfused_ms": 211.98505863529414,
+   "est_fused_ms": 201.326592,
+   "estimated_gain": 1.0529411764705883,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.010271329432725906,
+    "rel_tol": 0.05,
+    "rows_checked": 4096,
+    "addmm_rel": 0.003875262103974819,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.003875262103974819,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.010271329432725906,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 0.9960419025134892,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 840.0,
+     "max": 1140.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 77.0,
+     "min": 75.0,
+     "max": 78.0
+    },
+    "power_w": {
+     "median": 29.62,
+     "min": 21.89,
+     "max": 35.9
+    },
+    "n_samples": 283
+   },
+   "est_unfused_ms_adj": 214.09810745716098,
+   "est_fused_ms_adj": 203.3090515136719,
+   "estimated_gain_adj": 1.0530672680983098,
+   "addmm_gain": 1.012078863542221
+  },
+  {
+   "name": "r5_M512_K12288",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 512,
+    "N": 6144,
+    "K": 12288
+   },
+   "vendor_gemm_only_ms": 5.642912149429321,
+   "vendor_eager_unfused_ms": 5.748288154602051,
+   "clean_unfused_ms": 5.710095882415771,
+   "best_unfused_ms": 5.710095882415771,
+   "addmm_ms": 5.66595196723938,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 5.745391845703125,
+   "best_fused_ms": 5.66595196723938,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 5603.828,
+     "avg_us": 5603.828
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 55.71,
+     "avg_us": 55.71
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0077910853165772,
+   "measured_gain_verified": 1.0077910853165772,
+   "custom_unfused_ms": 5.811007976531982,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 5.745391845703125,
+   "custom_fused_cfg": [
+    128,
+    64,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0114206537327703,
+   "custom_unfused_same_tile_ms": 5.808495998382568,
+   "custom_gain_same_tile": 1.0109834375746953,
+   "custom_gemm_over_vendor_gemm": 1.0040546154782501,
+   "est_unfused_ms": 4.305329694117647,
+   "est_fused_ms": 4.194304000000001,
+   "estimated_gain": 1.026470588235294,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.008572523482143879,
+    "rel_tol": 0.05,
+    "rows_checked": 512,
+    "addmm_rel": 0.00394084258005023,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.00394084258005023,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.008572523482143879,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.008256686883339,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 1140.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 76.0,
+     "min": 73.0,
+     "max": 76.0
+    },
+    "power_w": {
+     "median": 22.33,
+     "min": 13.94,
+     "max": 23.99
+    },
+    "n_samples": 17
+   },
+   "est_unfused_ms_adj": 4.3479912392795095,
+   "est_fused_ms_adj": 4.235605239868164,
+   "estimated_gain_adj": 1.0265336340491549,
+   "addmm_gain": 1.0077910853165772
+  },
+  {
+   "name": "r5_M1024_K12288",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 1024,
+    "N": 6144,
+    "K": 12288
+   },
+   "vendor_gemm_only_ms": 11.211983680725096,
+   "vendor_eager_unfused_ms": 11.396736145019533,
+   "clean_unfused_ms": 11.36076784133911,
+   "best_unfused_ms": 11.36076784133911,
+   "addmm_ms": 11.287824153900146,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 11.425039768218994,
+   "best_fused_ms": 11.287824153900146,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 11193.919,
+     "avg_us": 11193.919
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 106.091,
+     "avg_us": 106.091
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0064621566073706,
+   "measured_gain_verified": 1.0064621566073706,
+   "custom_unfused_ms": 11.564623832702635,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     64,
+     32,
+     4,
+     3
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 11.425039768218994,
+   "custom_fused_cfg": [
+    128,
+    64,
+    32,
+    4,
+    3
+   ],
+   "custom_gain_best": 1.0122173810608452,
+   "custom_unfused_same_tile_ms": 11.554175853729246,
+   "custom_gain_same_tile": 1.0113029003075744,
+   "custom_gemm_over_vendor_gemm": 1.0110468002827686,
+   "est_unfused_ms": 8.610659388235295,
+   "est_fused_ms": 8.388608000000001,
+   "estimated_gain": 1.026470588235294,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.009640294127166271,
+    "rel_tol": 0.05,
+    "rows_checked": 1024,
+    "addmm_rel": 0.0038916373159736395,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0038916373159736395,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.009640294127166271,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.0066087038473737,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 1140.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 73.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 22.939999999999998,
+     "min": 21.2,
+     "max": 42.35
+    },
+    "n_samples": 22
+   },
+   "est_unfused_ms_adj": 8.695982478559019,
+   "est_fused_ms_adj": 8.471210479736328,
+   "estimated_gain_adj": 1.0265336340491549,
+   "addmm_gain": 1.0064621566073706
+  },
+  {
+   "name": "r5_M2048_K12288",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 2048,
+    "N": 6144,
+    "K": 12288
+   },
+   "vendor_gemm_only_ms": 22.409680366516113,
+   "vendor_eager_unfused_ms": 22.824800491333008,
+   "clean_unfused_ms": 22.915696144104007,
+   "best_unfused_ms": 22.824800491333008,
+   "addmm_ms": 22.640175819396973,
+   "compiled_ms": 25.954768180847168,
+   "nocg_ms": 22.834303855895993,
+   "forced_ms": 22.451632499694828,
+   "triton_ms": 22.684032440185547,
+   "best_fused_ms": 22.451632499694828,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 22297.381,
+     "avg_us": 22297.381
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 215.652,
+     "avg_us": 215.652
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.856,
+     "avg_us": 1.856
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 22302.093,
+      "avg_us": 22302.093
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 6,
+      "total_us": 2849.694,
+      "avg_us": 474.949
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 305.996,
+      "avg_us": 305.996
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 1.824,
+      "avg_us": 1.824
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 22298.246,
+      "avg_us": 22298.246
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 223.603,
+      "avg_us": 223.603
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 1.857,
+      "avg_us": 1.857
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 22203.761,
+      "avg_us": 22203.761
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 4,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.876,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.99,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 2849.694,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0166209736260048,
+   "measured_gain_verified": 1.0166209736260048,
+   "custom_unfused_ms": 23.119839668273926,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 22.684032440185547,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0192120703952234,
+   "custom_unfused_same_tile_ms": 23.134384155273438,
+   "custom_gain_same_tile": 1.0198532477096125,
+   "custom_gemm_over_vendor_gemm": 1.0174360621617276,
+   "est_unfused_ms": 17.22131877647059,
+   "est_fused_ms": 16.777216000000003,
+   "estimated_gain": 1.026470588235294,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.9511187076568604,
+    "rel_tol": 1.9022374153137207,
+    "rows_checked": 2048,
+    "addmm_rel": 1.091736912727356,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.0042853690683841705,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.009900837205350399,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0037576410467621,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 960.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 72.0,
+     "max": 76.0
+    },
+    "power_w": {
+     "median": 24.134999999999998,
+     "min": 13.96,
+     "max": 36.45
+    },
+    "n_samples": 56
+   },
+   "est_unfused_ms_adj": 17.391964957118038,
+   "est_fused_ms_adj": 16.942420959472656,
+   "estimated_gain_adj": 1.0265336340491549,
+   "addmm_gain": 1.0081547366685137
+  },
+  {
+   "name": "r5_M4096_K12288",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 4096,
+    "N": 6144,
+    "K": 12288
+   },
+   "vendor_gemm_only_ms": 44.72529602050781,
+   "vendor_eager_unfused_ms": 45.72475242614746,
+   "clean_unfused_ms": 45.70150375366211,
+   "best_unfused_ms": 45.70150375366211,
+   "addmm_ms": 45.28169631958008,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 45.18996810913085,
+   "best_fused_ms": 45.18996810913085,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 44582.287,
+     "avg_us": 44582.287
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 628.219,
+     "avg_us": 628.219
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.272,
+     "avg_us": 2.272
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0113196726161862,
+   "measured_gain_verified": 1.0113196726161862,
+   "custom_unfused_ms": 46.23123359680176,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 45.18996810913085,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0230419611086319,
+   "custom_unfused_same_tile_ms": 46.22128105163574,
+   "custom_gain_same_tile": 1.0228217231756909,
+   "custom_gemm_over_vendor_gemm": 1.014772098827853,
+   "est_unfused_ms": 34.44263755294118,
+   "est_fused_ms": 33.554432000000006,
+   "estimated_gain": 1.026470588235294,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.0980610847473145,
+    "rel_tol": 2.196122169494629,
+    "rows_checked": 4096,
+    "addmm_rel": 0.9488842487335205,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.00423822645097971,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.013233757577836514,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.0012120379363907,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 960.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 72.0,
+     "max": 76.0
+    },
+    "power_w": {
+     "median": 26.59,
+     "min": 20.94,
+     "max": 33.51
+    },
+    "n_samples": 55
+   },
+   "est_unfused_ms_adj": 34.783929914236076,
+   "est_fused_ms_adj": 33.88484191894531,
+   "estimated_gain_adj": 1.0265336340491549,
+   "addmm_gain": 1.0092710182745628
+  },
+  {
+   "name": "r5_M8192_K12288",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 8192,
+    "N": 6144,
+    "K": 12288
+   },
+   "vendor_gemm_only_ms": 89.36340713500977,
+   "vendor_eager_unfused_ms": 91.21759796142578,
+   "clean_unfused_ms": 91.25104141235352,
+   "best_unfused_ms": 91.21759796142578,
+   "addmm_ms": 90.447998046875,
+   "compiled_ms": 96.79307174682617,
+   "nocg_ms": 90.70600128173828,
+   "forced_ms": 89.4662208557129,
+   "triton_ms": 90.32609558105469,
+   "best_fused_ms": 89.4662208557129,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 91763.75,
+     "avg_us": 91763.75
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 1157.713,
+     "avg_us": 1157.713
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 3.392,
+     "avg_us": 3.392
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 89141.273,
+      "avg_us": 89141.273
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 11,
+      "total_us": 6027.205,
+      "avg_us": 547.928
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1263.091,
+      "avg_us": 1263.091
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 1.984,
+      "avg_us": 1.984
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 89488.297,
+      "avg_us": 89488.297
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1184.215,
+      "avg_us": 1184.215
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 2.496,
+      "avg_us": 2.496
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 91341.872,
+      "avg_us": 91341.872
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 4,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9244,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9869,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 6027.205,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.019575847609987,
+   "measured_gain_verified": 1.019575847609987,
+   "custom_unfused_ms": 92.65633392333984,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 90.32609558105469,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0257980634200456,
+   "custom_unfused_same_tile_ms": 92.63710403442383,
+   "custom_gain_same_tile": 1.0255851693633247,
+   "custom_gemm_over_vendor_gemm": 1.0153711156381642,
+   "est_unfused_ms": 68.88527510588236,
+   "est_fused_ms": 67.10886400000001,
+   "estimated_gain": 1.026470588235294,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.1151546239852905,
+    "rel_tol": 2.230309247970581,
+    "rows_checked": 4096,
+    "addmm_rel": 1.1628522872924805,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.00414455309510231,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.014866204001009464,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0003031236850928,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 840.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 76.0,
+     "min": 73.0,
+     "max": 78.0
+    },
+    "power_w": {
+     "median": 25.35,
+     "min": 10.59,
+     "max": 36.35
+    },
+    "n_samples": 159
+   },
+   "est_unfused_ms_adj": 69.56785982847215,
+   "est_fused_ms_adj": 67.76968383789062,
+   "estimated_gain_adj": 1.0265336340491549,
+   "addmm_gain": 1.0085087556515284
+  },
+  {
+   "name": "r5_M16384_K12288",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 16384,
+    "N": 6144,
+    "K": 12288
+   },
+   "vendor_gemm_only_ms": 178.57522583007812,
+   "vendor_eager_unfused_ms": 182.48165130615234,
+   "clean_unfused_ms": 182.59612274169922,
+   "best_unfused_ms": 182.48165130615234,
+   "addmm_ms": 181.08903503417966,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 180.3021926879883,
+   "best_fused_ms": 180.3021926879883,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 178271.049,
+     "avg_us": 178271.049
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 2432.963,
+     "avg_us": 2432.963
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.305,
+     "avg_us": 2.305
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.012087809835655,
+   "measured_gain_verified": 1.012087809835655,
+   "custom_unfused_ms": 184.92852783203125,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 180.3021926879883,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0256587847051244,
+   "custom_unfused_same_tile_ms": 185.0652313232422,
+   "custom_gain_same_tile": 1.0264169756576187,
+   "custom_gemm_over_vendor_gemm": 1.0148916022806254,
+   "est_unfused_ms": 137.77055021176471,
+   "est_fused_ms": 134.21772800000002,
+   "estimated_gain": 1.026470588235294,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.9635900259017944,
+    "rel_tol": 1.9271800518035889,
+    "rows_checked": 4096,
+    "addmm_rel": 0.9894334673881531,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.004395829513669014,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.010677221231162548,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 0.9998096231889211,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 855.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 77.0,
+     "min": 73.0,
+     "max": 79.0
+    },
+    "power_w": {
+     "median": 29.855,
+     "min": 21.51,
+     "max": 36.04
+    },
+    "n_samples": 192
+   },
+   "est_unfused_ms_adj": 139.1357196569443,
+   "est_fused_ms_adj": 135.53936767578125,
+   "estimated_gain_adj": 1.0265336340491549,
+   "addmm_gain": 1.007690229680167
+  },
+  {
+   "name": "r5_M32768_K12288",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": true,
+   "dims": {
+    "M": 32768,
+    "N": 6144,
+    "K": 12288
+   },
+   "vendor_gemm_only_ms": 358.7786102294922,
+   "vendor_eager_unfused_ms": 366.419677734375,
+   "clean_unfused_ms": 366.3236846923828,
+   "best_unfused_ms": 366.3236846923828,
+   "addmm_ms": 363.93353271484375,
+   "compiled_ms": 382.27891540527344,
+   "nocg_ms": 364.0597381591797,
+   "forced_ms": 356.7212829589844,
+   "triton_ms": 585.1292419433594,
+   "best_fused_ms": 356.7212829589844,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 358525.958,
+     "avg_us": 358525.958
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 5237.82,
+     "avg_us": 5237.82
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 3.264,
+     "avg_us": 3.264
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 359127.814,
+      "avg_us": 359127.814
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 33,
+      "total_us": 17986.832,
+      "avg_us": 545.056
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5262.287,
+      "avg_us": 5262.287
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 1.792,
+      "avg_us": 1.792
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 356862.464,
+      "avg_us": 356862.464
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5327.852,
+      "avg_us": 5327.852
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 3.232,
+      "avg_us": 3.232
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 354407.284,
+      "avg_us": 354407.284
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 4,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9392,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9853,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 17986.832,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0269184996581842,
+   "measured_gain_verified": 1.0269184996581842,
+   "custom_unfused_ms": 605.3037719726562,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 585.1292419433594,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0344787588504247,
+   "custom_unfused_same_tile_ms": 604.388671875,
+   "custom_gain_same_tile": 1.0329148306922336,
+   "custom_gemm_over_vendor_gemm": 1.013142266707467,
+   "est_unfused_ms": 275.54110042352943,
+   "est_fused_ms": 268.43545600000004,
+   "estimated_gain": 1.026470588235294,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.0259207487106323,
+    "rel_tol": 2.0518414974212646,
+    "rows_checked": 4096,
+    "addmm_rel": 0.9678217172622681,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.004211654886603355,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.01124531775712967,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0000064220025462,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 360.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 76.0,
+     "min": 74.0,
+     "max": 79.0
+    },
+    "power_w": {
+     "median": 25.95,
+     "min": 10.53,
+     "max": 35.91
+    },
+    "n_samples": 637
+   },
+   "est_unfused_ms_adj": 278.2714393138886,
+   "est_fused_ms_adj": 271.0787353515625,
+   "estimated_gain_adj": 1.0265336340491549,
+   "addmm_gain": 1.0065675508373992
+  },
+  {
+   "name": "r5_M49152_K12288",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": false,
+   "dims": {
+    "M": 49152,
+    "N": 6144,
+    "K": 12288
+   },
+   "vendor_gemm_only_ms": 537.3756408691406,
+   "vendor_eager_unfused_ms": 549.1934509277343,
+   "clean_unfused_ms": 621.8508605957031,
+   "best_unfused_ms": 549.1934509277343,
+   "addmm_ms": 546.5552978515624,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 753.6929931640626,
+   "best_fused_ms": 546.5552978515624,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 550841.935,
+     "avg_us": 550841.935
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 89951.208,
+     "avg_us": 89951.208
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.656,
+     "avg_us": 2.656
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0048268731206926,
+   "measured_gain_verified": 1.0048268731206926,
+   "custom_unfused_ms": 762.5198669433594,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 753.6929931640626,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.0117114977309805,
+   "custom_unfused_same_tile_ms": 762.1912231445312,
+   "custom_gain_same_tile": 1.011275453079101,
+   "custom_gemm_over_vendor_gemm": 1.3890399219705005,
+   "est_unfused_ms": 413.31165063529414,
+   "est_fused_ms": 402.653184,
+   "estimated_gain": 1.0264705882352942,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.0071132183074951,
+    "rel_tol": 2.0142264366149902,
+    "rows_checked": 4096,
+    "addmm_rel": 1.1691126823425293,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.004108236636966467,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.011606858111917973,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.0025486229127891,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 840.0,
+     "min": 345.0,
+     "max": 1140.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 76.0,
+     "min": 75.0,
+     "max": 77.0
+    },
+    "power_w": {
+     "median": 25.88,
+     "min": 13.98,
+     "max": 30.51
+    },
+    "n_samples": 705
+   },
+   "est_unfused_ms_adj": 417.4071589708329,
+   "est_fused_ms_adj": 406.6181030273438,
+   "estimated_gain_adj": 1.0265336340491549,
+   "addmm_gain": 1.0048268731206926
+  },
+  {
+   "name": "r5_M512_K16384",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 512,
+    "N": 6144,
+    "K": 16384
+   },
+   "vendor_gemm_only_ms": 7.547183990478516,
+   "vendor_eager_unfused_ms": 7.602911949157715,
+   "clean_unfused_ms": 7.598400115966797,
+   "best_unfused_ms": 7.598400115966797,
+   "addmm_ms": 7.5672478675842285,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 7.62499213218689,
+   "best_fused_ms": 7.5672478675842285,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 7445.121,
+     "avg_us": 7445.121
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 59.77,
+     "avg_us": 59.77
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0041167210229778,
+   "measured_gain_verified": 1.0041167210229778,
+   "custom_unfused_ms": 7.749040126800537,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 7.62499213218689,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.016268606244197,
+   "custom_unfused_same_tile_ms": 7.758671998977661,
+   "custom_gain_same_tile": 1.0175318038987184,
+   "custom_gemm_over_vendor_gemm": 1.0111914686706607,
+   "est_unfused_ms": 5.70343102745098,
+   "est_fused_ms": 5.592405333333333,
+   "estimated_gain": 1.0198529411764705,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.010301843285560608,
+    "rel_tol": 0.05,
+    "rows_checked": 512,
+    "addmm_rel": 0.006036791019141674,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.006036791019141674,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.010301843285560608,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 0.983275345990723,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 900.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 73.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 22.295,
+     "min": 13.59,
+     "max": 25.05
+    },
+    "n_samples": 18
+   },
+   "est_unfused_ms_adj": 5.759859652568897,
+   "est_fused_ms_adj": 5.647473653157553,
+   "estimated_gain_adj": 1.019900225536866,
+   "addmm_gain": 1.0041167210229778
+  },
+  {
+   "name": "r5_M1024_K16384",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 1024,
+    "N": 6144,
+    "K": 16384
+   },
+   "vendor_gemm_only_ms": 14.916895866394043,
+   "vendor_eager_unfused_ms": 15.122015953063963,
+   "clean_unfused_ms": 15.009024143218994,
+   "best_unfused_ms": 15.009024143218994,
+   "addmm_ms": 15.001232147216797,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 15.38478422164917,
+   "best_fused_ms": 15.001232147216797,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 14876.225,
+     "avg_us": 14876.225
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 108.899,
+     "avg_us": 108.899
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.000519423733046,
+   "measured_gain_verified": 1.000519423733046,
+   "custom_unfused_ms": 15.79969596862793,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 15.38478422164917,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0269689675851874,
+   "custom_unfused_same_tile_ms": 16.15937614440918,
+   "custom_gain_same_tile": 1.0503479224407983,
+   "custom_gemm_over_vendor_gemm": 1.0452834475774988,
+   "est_unfused_ms": 11.40686205490196,
+   "est_fused_ms": 11.184810666666666,
+   "estimated_gain": 1.0198529411764705,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.013460395857691765,
+    "rel_tol": 0.05,
+    "rows_checked": 1024,
+    "addmm_rel": 0.005615889094769955,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.005615889094769955,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.013460395857691765,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.003809928958855,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 630.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 72.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 23.65,
+     "min": 12.77,
+     "max": 26.57
+    },
+    "n_samples": 27
+   },
+   "est_unfused_ms_adj": 11.519719305137794,
+   "est_fused_ms_adj": 11.294947306315105,
+   "estimated_gain_adj": 1.019900225536866,
+   "addmm_gain": 1.000519423733046
+  },
+  {
+   "name": "r5_M2048_K16384",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 2048,
+    "N": 6144,
+    "K": 16384
+   },
+   "vendor_gemm_only_ms": 29.86008071899414,
+   "vendor_eager_unfused_ms": 30.132335662841797,
+   "clean_unfused_ms": 30.257023811340332,
+   "best_unfused_ms": 30.132335662841797,
+   "addmm_ms": 30.012527465820312,
+   "compiled_ms": 34.09878540039063,
+   "nocg_ms": 30.243280410766598,
+   "forced_ms": 35.66763114929199,
+   "triton_ms": 35.21580696105957,
+   "best_fused_ms": 30.012527465820312,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 29647.55,
+     "avg_us": 29647.55
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 215.555,
+     "avg_us": 215.555
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.248,
+     "avg_us": 1.248
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 29655.631,
+      "avg_us": 29655.631
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 7,
+      "total_us": 3940.982,
+      "avg_us": 562.997
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 294.718,
+      "avg_us": 294.718
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 2.049,
+      "avg_us": 2.049
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 29990.463,
+      "avg_us": 29990.463
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 219.167,
+      "avg_us": 219.167
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 1.824,
+      "avg_us": 1.824
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 37666.438,
+      "avg_us": 37666.438
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 4,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.875,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9927,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 3940.982,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0039919396044845,
+   "measured_gain_verified": 1.0039919396044845,
+   "custom_unfused_ms": 35.84904098510742,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 35.21580696105957,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.0179815281458144,
+   "custom_unfused_same_tile_ms": 35.886207580566406,
+   "custom_gain_same_tile": 1.0190369233977272,
+   "custom_gemm_over_vendor_gemm": 1.1586862504297273,
+   "est_unfused_ms": 22.81372410980392,
+   "est_fused_ms": 22.36962133333333,
+   "estimated_gain": 1.0198529411764705,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.34183931350708,
+    "rel_tol": 2.68367862701416,
+    "rows_checked": 2048,
+    "addmm_rel": 1.2973774671554565,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.005579241551458836,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.010661611333489418,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0003396936573867,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 420.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 72.0,
+     "max": 76.0
+    },
+    "power_w": {
+     "median": 24.705,
+     "min": 11.8,
+     "max": 33.03
+    },
+    "n_samples": 74
+   },
+   "est_unfused_ms_adj": 23.03943861027559,
+   "est_fused_ms_adj": 22.58989461263021,
+   "estimated_gain_adj": 1.019900225536866,
+   "addmm_gain": 1.0039919396044845
+  },
+  {
+   "name": "r5_M4096_K16384",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 4096,
+    "N": 6144,
+    "K": 16384
+   },
+   "vendor_gemm_only_ms": 59.46972846984863,
+   "vendor_eager_unfused_ms": 60.41604804992676,
+   "clean_unfused_ms": 60.312431335449226,
+   "best_unfused_ms": 60.312431335449226,
+   "addmm_ms": 59.98852729797363,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 83.29627227783205,
+   "best_fused_ms": 59.98852729797363,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 59283.926,
+     "avg_us": 59283.926
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 490.34,
+     "avg_us": 490.34
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.272,
+     "avg_us": 2.272
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0053994330593699,
+   "measured_gain_verified": 1.0053994330593699,
+   "custom_unfused_ms": 83.58438491821289,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 83.29627227783205,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.0034588899659262,
+   "custom_unfused_same_tile_ms": 84.50251388549803,
+   "custom_gain_same_tile": 1.0144813396167671,
+   "custom_gemm_over_vendor_gemm": 1.3313077136359694,
+   "est_unfused_ms": 45.62744821960784,
+   "est_fused_ms": 44.73924266666666,
+   "estimated_gain": 1.0198529411764705,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.1151599884033203,
+    "rel_tol": 2.2303199768066406,
+    "rows_checked": 4096,
+    "addmm_rel": 1.1356045007705688,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.006143886595964432,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.01202133484184742,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 0.9999564133407249,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 877.5,
+     "min": 375.0,
+     "max": 1140.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 73.0,
+     "max": 76.0
+    },
+    "power_w": {
+     "median": 25.41,
+     "min": 14.78,
+     "max": 27.05
+    },
+    "n_samples": 86
+   },
+   "est_unfused_ms_adj": 46.07887722055118,
+   "est_fused_ms_adj": 45.17978922526042,
+   "estimated_gain_adj": 1.019900225536866,
+   "addmm_gain": 1.0053994330593699
+  },
+  {
+   "name": "r5_M8192_K16384",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 8192,
+    "N": 6144,
+    "K": 16384
+   },
+   "vendor_gemm_only_ms": 118.8271026611328,
+   "vendor_eager_unfused_ms": 120.76625442504883,
+   "clean_unfused_ms": 120.66136169433594,
+   "best_unfused_ms": 120.66136169433594,
+   "addmm_ms": 119.99092864990234,
+   "compiled_ms": 128.00783538818362,
+   "nocg_ms": 120.34510421752931,
+   "forced_ms": 121.40763092041016,
+   "triton_ms": 168.43364715576172,
+   "best_fused_ms": 119.99092864990234,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 120889.968,
+     "avg_us": 120889.968
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 1142.381,
+     "avg_us": 1142.381
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.496,
+     "avg_us": 2.496
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 119943.433,
+      "avg_us": 119943.433
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 14,
+      "total_us": 8310.058,
+      "avg_us": 593.576
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1301.104,
+      "avg_us": 1301.104
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 2.208,
+      "avg_us": 2.208
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 118570.358,
+      "avg_us": 118570.358
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1171.86,
+      "avg_us": 1171.86
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 4.384,
+      "avg_us": 4.384
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 119527.058,
+      "avg_us": 119527.058
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 4,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9258,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9902,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 8310.058,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0055873644114357,
+   "measured_gain_verified": 1.0055873644114357,
+   "custom_unfused_ms": 169.61542510986328,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 168.43364715576172,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.0070162819250044,
+   "custom_unfused_same_tile_ms": 170.48433685302734,
+   "custom_gain_same_tile": 1.0121750596267098,
+   "custom_gemm_over_vendor_gemm": 1.4103258151285152,
+   "est_unfused_ms": 91.25489643921568,
+   "est_fused_ms": 89.47848533333332,
+   "estimated_gain": 1.0198529411764705,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.0934985876083374,
+    "rel_tol": 2.186997175216675,
+    "rows_checked": 4096,
+    "addmm_rel": 1.1454541683197021,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.008820101618766785,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.01042167004197836,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0004141919058773,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 885.0,
+     "min": 345.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 76.0,
+     "min": 73.0,
+     "max": 77.0
+    },
+    "power_w": {
+     "median": 25.37,
+     "min": 10.57,
+     "max": 27.05
+    },
+    "n_samples": 243
+   },
+   "est_unfused_ms_adj": 92.15775444110236,
+   "est_fused_ms_adj": 90.35957845052084,
+   "estimated_gain_adj": 1.019900225536866,
+   "addmm_gain": 1.0055873644114357
+  },
+  {
+   "name": "r5_M16384_K16384",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 16384,
+    "N": 6144,
+    "K": 16384
+   },
+   "vendor_gemm_only_ms": 237.724609375,
+   "vendor_eager_unfused_ms": 241.50953674316406,
+   "clean_unfused_ms": 241.3777618408203,
+   "best_unfused_ms": 241.3777618408203,
+   "addmm_ms": 240.2194595336914,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 339.02650451660156,
+   "best_fused_ms": 240.2194595336914,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 239078.82,
+     "avg_us": 239078.82
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 2442.523,
+     "avg_us": 2442.523
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.272,
+     "avg_us": 2.272
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0048218504419975,
+   "measured_gain_verified": 1.0048218504419975,
+   "custom_unfused_ms": 343.08892822265625,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 339.02650451660156,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.0119826139016685,
+   "custom_unfused_same_tile_ms": 342.42091369628906,
+   "custom_gain_same_tile": 1.0100122236299118,
+   "custom_gemm_over_vendor_gemm": 1.4397000677812923,
+   "est_unfused_ms": 182.50979287843137,
+   "est_fused_ms": 178.95697066666665,
+   "estimated_gain": 1.0198529411764705,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.1318095922470093,
+    "rel_tol": 2.2636191844940186,
+    "rows_checked": 4096,
+    "addmm_rel": 1.184216856956482,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.005875186994671822,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.01152685284614563,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 0.9999275651624697,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 840.0,
+     "min": 360.0,
+     "max": 1140.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 76.0,
+     "min": 73.0,
+     "max": 77.0
+    },
+    "power_w": {
+     "median": 25.79,
+     "min": 20.0,
+     "max": 27.3
+    },
+    "n_samples": 317
+   },
+   "est_unfused_ms_adj": 184.3155088822047,
+   "est_fused_ms_adj": 180.71915690104169,
+   "estimated_gain_adj": 1.019900225536866,
+   "addmm_gain": 1.0048218504419975
+  },
+  {
+   "name": "r5_M32768_K16384",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": true,
+   "dims": {
+    "M": 32768,
+    "N": 6144,
+    "K": 16384
+   },
+   "vendor_gemm_only_ms": 476.54339599609375,
+   "vendor_eager_unfused_ms": 484.3227081298828,
+   "clean_unfused_ms": 484.3323516845703,
+   "best_unfused_ms": 484.3227081298828,
+   "addmm_ms": 481.7403869628906,
+   "compiled_ms": 504.380844116211,
+   "nocg_ms": 481.9510192871094,
+   "forced_ms": 387.15155029296875,
+   "triton_ms": 484.8540954589844,
+   "best_fused_ms": 387.15155029296875,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 475621.8,
+     "avg_us": 475621.8
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 5191.185,
+     "avg_us": 5191.185
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.273,
+     "avg_us": 2.273
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 474235.62,
+      "avg_us": 474235.62
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 40,
+      "total_us": 22326.282,
+      "avg_us": 558.157
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5379.25,
+      "avg_us": 5379.25
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 1.792,
+      "avg_us": 1.792
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 476188.551,
+      "avg_us": 476188.551
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5294.607,
+      "avg_us": 5294.607
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 2.304,
+      "avg_us": 2.304
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 385786.624,
+      "avg_us": 385786.624
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 4,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9448,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.989,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 22326.282,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.250989974761516,
+   "measured_gain_verified": 1.250989974761516,
+   "custom_unfused_ms": 495.7930603027344,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 484.8540954589844,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0225613539128606,
+   "custom_unfused_same_tile_ms": 495.84890747070307,
+   "custom_gain_same_tile": 1.0226765373639064,
+   "custom_gemm_over_vendor_gemm": 1.0211417926973763,
+   "est_unfused_ms": 365.01958575686274,
+   "est_fused_ms": 357.9139413333333,
+   "estimated_gain": 1.0198529411764705,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.2632356882095337,
+    "rel_tol": 2.5264713764190674,
+    "rows_checked": 4096,
+    "addmm_rel": 1.1246702671051025,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.006119623314589262,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.011564456857740879,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0034340515955622,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 840.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 66.0,
+     "min": 65.0,
+     "max": 79.0
+    },
+    "power_w": {
+     "median": 12.98,
+     "min": 10.6,
+     "max": 37.44
+    },
+    "n_samples": 4392
+   },
+   "est_unfused_ms_adj": 368.6310177644094,
+   "est_fused_ms_adj": 361.43831380208337,
+   "estimated_gain_adj": 1.019900225536866,
+   "addmm_gain": 1.0053603999931837
+  },
+  {
+   "name": "r5_M49152_K16384",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": false,
+   "dims": {
+    "M": 49152,
+    "N": 6144,
+    "K": 16384
+   },
+   "vendor_gemm_only_ms": 739.1484985351562,
+   "vendor_eager_unfused_ms": 845.7463989257811,
+   "clean_unfused_ms": 840.9038391113281,
+   "best_unfused_ms": 840.9038391113281,
+   "addmm_ms": 798.3480834960936,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 1025.6294555664062,
+   "best_fused_ms": 798.3480834960936,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 705932.133,
+     "avg_us": 705932.133
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 91335.167,
+     "avg_us": 91335.167
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.209,
+     "avg_us": 2.209
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0533047632918164,
+   "measured_gain_verified": 1.0533047632918164,
+   "custom_unfused_ms": 1215.386962890625,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 1025.6294555664062,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.1850156567699441,
+   "custom_unfused_same_tile_ms": 1031.4135131835938,
+   "custom_gain_same_tile": 1.005639519795181,
+   "custom_gemm_over_vendor_gemm": 0.9811018125285863,
+   "est_unfused_ms": 547.5293786352942,
+   "est_fused_ms": 536.8709120000001,
+   "estimated_gain": 1.0198529411764705,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.2099419832229614,
+    "rel_tol": 2.419883966445923,
+    "rows_checked": 4096,
+    "addmm_rel": 1.0349903106689453,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.005828666966408491,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.011550769209861755,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.0003292263576953,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 870.0,
+     "min": 345.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 76.0,
+     "min": 73.0,
+     "max": 79.0
+    },
+    "power_w": {
+     "median": 25.89,
+     "min": 11.87,
+     "max": 36.11
+    },
+    "n_samples": 910
+   },
+   "est_unfused_ms_adj": 552.9465266466142,
+   "est_fused_ms_adj": 542.157470703125,
+   "estimated_gain_adj": 1.019900225536866,
+   "addmm_gain": 1.0533047632918164
+  },
+  {
+   "name": "r5_M512_K24576",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 512,
+    "N": 6144,
+    "K": 24576
+   },
+   "vendor_gemm_only_ms": 10.768815994262694,
+   "vendor_eager_unfused_ms": 11.277743816375732,
+   "clean_unfused_ms": 11.297200202941895,
+   "best_unfused_ms": 11.277743816375732,
+   "addmm_ms": 11.286479949951172,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 11.344287872314453,
+   "best_fused_ms": 11.286479949951172,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 11112.587,
+     "avg_us": 11112.587
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 58.459,
+     "avg_us": 58.459
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.28,
+     "avg_us": 1.28
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 0.9992259647282253,
+   "measured_gain_verified": 0.9992259647282253,
+   "custom_unfused_ms": 11.597616195678711,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     128,
+     64,
+     4
+    ]
+   },
+   "custom_fused_ms": 11.344287872314453,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0223309145726547,
+   "custom_unfused_same_tile_ms": 11.637759685516356,
+   "custom_gain_same_tile": 1.0258695668256195,
+   "custom_gemm_over_vendor_gemm": 1.0700556557156524,
+   "est_unfused_ms": 8.499633694117648,
+   "est_fused_ms": 8.388608000000001,
+   "estimated_gain": 1.0132352941176472,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.120906114578247,
+    "rel_tol": 2.241812229156494,
+    "rows_checked": 512,
+    "addmm_rel": 1.2831027507781982,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.00914035551249981,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.014074930921196938,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.0505355509894598,
+   "drift_clean": false,
+   "excluded_from_aggregate": true,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 735.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 73.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 22.38,
+     "min": 14.25,
+     "max": 24.96
+    },
+    "n_samples": 28
+   },
+   "est_unfused_ms_adj": 8.583596479147674,
+   "est_fused_ms_adj": 8.471210479736328,
+   "estimated_gain_adj": 1.0132668170245775,
+   "addmm_gain": 0.9992259647282253
+  },
+  {
+   "name": "r5_M1024_K24576",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 1024,
+    "N": 6144,
+    "K": 24576
+   },
+   "vendor_gemm_only_ms": 22.18172836303711,
+   "vendor_eager_unfused_ms": 22.517056465148926,
+   "clean_unfused_ms": 22.493728637695312,
+   "best_unfused_ms": 22.493728637695312,
+   "addmm_ms": 22.426511764526367,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 23.078767776489258,
+   "best_fused_ms": 22.426511764526367,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8>(cutlass_80_tensorop_bf16_s16816gemm_relu_bf16_128x128_32x4_nn_align8::Params)",
+     "count": 1,
+     "total_us": 22250.154,
+     "avg_us": 22250.154
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 108.834,
+     "avg_us": 108.834
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0029972058907202,
+   "measured_gain_verified": 1.0029972058907202,
+   "custom_unfused_ms": 24.45785617828369,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 23.078767776489258,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.0597557207191683,
+   "custom_unfused_same_tile_ms": 24.603551864624023,
+   "custom_gain_same_tile": 1.0660686958204106,
+   "custom_gemm_over_vendor_gemm": 1.0548775737526628,
+   "est_unfused_ms": 16.999267388235296,
+   "est_fused_ms": 16.777216000000003,
+   "estimated_gain": 1.0132352941176472,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 0.013543217442929745,
+    "rel_tol": 0.05,
+    "rows_checked": 1024,
+    "addmm_rel": 0.010689157992601395,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.010689157992601395,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.013543217442929745,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.008617525912726,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 450.0,
+     "max": 1320.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 74.0,
+     "max": 75.0
+    },
+    "power_w": {
+     "median": 24.33,
+     "min": 20.46,
+     "max": 27.85
+    },
+    "n_samples": 34
+   },
+   "est_unfused_ms_adj": 17.16719295829535,
+   "est_fused_ms_adj": 16.942420959472656,
+   "estimated_gain_adj": 1.0132668170245775,
+   "addmm_gain": 1.0029972058907202
+  },
+  {
+   "name": "r5_M2048_K24576",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 2048,
+    "N": 6144,
+    "K": 24576
+   },
+   "vendor_gemm_only_ms": 44.59742546081543,
+   "vendor_eager_unfused_ms": 44.99638366699219,
+   "clean_unfused_ms": 44.98208045959473,
+   "best_unfused_ms": 44.98208045959473,
+   "addmm_ms": 44.770111083984375,
+   "compiled_ms": 50.80377769470215,
+   "nocg_ms": 45.01046371459961,
+   "forced_ms": 45.00225639343262,
+   "triton_ms": 54.24844932556152,
+   "best_fused_ms": 44.770111083984375,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 44408.87,
+     "avg_us": 44408.87
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 212.218,
+     "avg_us": 212.218
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.824,
+     "avg_us": 1.824
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 44415.429,
+      "avg_us": 44415.429
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 11,
+      "total_us": 5652.587,
+      "avg_us": 513.872
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 307.385,
+      "avg_us": 307.385
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 2.433,
+      "avg_us": 2.433
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 44409.52,
+      "avg_us": 44409.52
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 210.224,
+      "avg_us": 210.224
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 1.856,
+      "avg_us": 1.856
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 47082.449,
+      "avg_us": 47082.449
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 4,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.8816,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9952,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 5652.587,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0047346180404315,
+   "measured_gain_verified": 1.0047346180404315,
+   "custom_unfused_ms": 54.10996818542481,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 54.24844932556152,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 0.9974472792889314,
+   "custom_unfused_same_tile_ms": 54.44758415222168,
+   "custom_gain_same_tile": 1.00367079297447,
+   "custom_gemm_over_vendor_gemm": 1.1362506760038054,
+   "est_unfused_ms": 33.99853477647059,
+   "est_fused_ms": 33.554432000000006,
+   "estimated_gain": 1.0132352941176472,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.650489330291748,
+    "rel_tol": 3.300978660583496,
+    "rows_checked": 2048,
+    "addmm_rel": 1.5849553346633911,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.012466663494706154,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.015808137133717537,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0009650629258235,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1140.0,
+     "min": 390.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 75.0,
+     "min": 72.0,
+     "max": 76.0
+    },
+    "power_w": {
+     "median": 24.92,
+     "min": 10.38,
+     "max": 29.29
+    },
+    "n_samples": 101
+   },
+   "est_unfused_ms_adj": 34.3343859165907,
+   "est_fused_ms_adj": 33.88484191894531,
+   "estimated_gain_adj": 1.0132668170245775,
+   "addmm_gain": 1.0047346180404315
+  },
+  {
+   "name": "r5_M4096_K24576",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 4096,
+    "N": 6144,
+    "K": 24576
+   },
+   "vendor_gemm_only_ms": 88.99638748168945,
+   "vendor_eager_unfused_ms": 89.86142349243164,
+   "clean_unfused_ms": 89.86339187622069,
+   "best_unfused_ms": 89.86142349243164,
+   "addmm_ms": 89.49044799804688,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 125.02907180786133,
+   "best_fused_ms": 89.49044799804688,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 88792.006,
+     "avg_us": 88792.006
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 494.161,
+     "avg_us": 494.161
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.432,
+     "avg_us": 2.432
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0041454200161437,
+   "measured_gain_verified": 1.0041454200161437,
+   "custom_unfused_ms": 126.1658897399902,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 125.02907180786133,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.0090924287902887,
+   "custom_unfused_same_tile_ms": 126.72059249877928,
+   "custom_gain_same_tile": 1.013529019023011,
+   "custom_gemm_over_vendor_gemm": 1.3349266556104538,
+   "est_unfused_ms": 67.99706955294118,
+   "est_fused_ms": 67.10886400000001,
+   "estimated_gain": 1.0132352941176472,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.534963607788086,
+    "rel_tol": 3.069927215576172,
+    "rows_checked": 4096,
+    "addmm_rel": 1.309975504875183,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.012451310642063618,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.01705876737833023,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.0006613839108998,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 870.0,
+     "min": 375.0,
+     "max": 1140.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 76.0,
+     "min": 75.0,
+     "max": 77.0
+    },
+    "power_w": {
+     "median": 25.41,
+     "min": 19.09,
+     "max": 28.03
+    },
+    "n_samples": 120
+   },
+   "est_unfused_ms_adj": 68.6687718331814,
+   "est_fused_ms_adj": 67.76968383789062,
+   "estimated_gain_adj": 1.0132668170245775,
+   "addmm_gain": 1.0041454200161437
+  },
+  {
+   "name": "r5_M8192_K24576",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": true,
+   "dims": {
+    "M": 8192,
+    "N": 6144,
+    "K": 24576
+   },
+   "vendor_gemm_only_ms": 177.80420684814453,
+   "vendor_eager_unfused_ms": 179.8012466430664,
+   "clean_unfused_ms": 179.6469268798828,
+   "best_unfused_ms": 179.6469268798828,
+   "addmm_ms": 179.2064514160156,
+   "compiled_ms": 190.0821762084961,
+   "nocg_ms": 179.46952056884766,
+   "forced_ms": 185.79589080810547,
+   "triton_ms": 253.57540893554688,
+   "best_fused_ms": 179.2064514160156,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 179512.155,
+     "avg_us": 179512.155
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 1137.795,
+     "avg_us": 1137.795
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.464,
+     "avg_us": 2.464
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 177549.884,
+      "avg_us": 177549.884
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 20,
+      "total_us": 10727.818,
+      "avg_us": 536.391
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1274.449,
+      "avg_us": 1274.449
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 1.888,
+      "avg_us": 1.888
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 179527.378,
+      "avg_us": 179527.378
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 1167.267,
+      "avg_us": 1167.267
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 4.0,
+      "avg_us": 4.0
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 178038.289,
+      "avg_us": 178038.289
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 4,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9367,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9935,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 10727.818,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.002457921912893,
+   "measured_gain_verified": 1.002457921912893,
+   "custom_unfused_ms": 254.12368011474607,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     32,
+     256,
+     4
+    ]
+   },
+   "custom_fused_ms": 253.57540893554688,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.0021621622597425,
+   "custom_unfused_same_tile_ms": 255.84987640380862,
+   "custom_gain_same_tile": 1.0089695900632063,
+   "custom_gemm_over_vendor_gemm": 1.4445146959558688,
+   "est_unfused_ms": 135.99413910588237,
+   "est_fused_ms": 134.21772800000002,
+   "estimated_gain": 1.0132352941176472,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.3470689058303833,
+    "rel_tol": 2.6941378116607666,
+    "rows_checked": 4096,
+    "addmm_rel": 1.7886161804199219,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.011256213299930096,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.014495314098894596,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0006465951972083,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 855.0,
+     "min": 360.0,
+     "max": 1185.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 76.0,
+     "min": 74.0,
+     "max": 77.0
+    },
+    "power_w": {
+     "median": 25.625,
+     "min": 10.31,
+     "max": 27.88
+    },
+    "n_samples": 352
+   },
+   "est_unfused_ms_adj": 137.3375436663628,
+   "est_fused_ms_adj": 135.53936767578125,
+   "estimated_gain_adj": 1.0132668170245775,
+   "addmm_gain": 1.002457921912893
+  },
+  {
+   "name": "r5_M16384_K24576",
+   "kind": "res2_down",
+   "regime": "decode",
+   "core": false,
+   "dims": {
+    "M": 16384,
+    "N": 6144,
+    "K": 24576
+   },
+   "vendor_gemm_only_ms": 357.30868530273443,
+   "vendor_eager_unfused_ms": 361.05873107910156,
+   "clean_unfused_ms": 360.97566223144526,
+   "best_unfused_ms": 360.97566223144526,
+   "addmm_ms": 359.7086334228515,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 506.64280700683594,
+   "best_fused_ms": 359.7086334228515,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 357459.047,
+     "avg_us": 357459.047
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 2666.139,
+     "avg_us": 2666.139
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.336,
+     "avg_us": 2.336
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.0035223753084188,
+   "measured_gain_verified": 1.0035223753084188,
+   "custom_unfused_ms": 510.574966430664,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 506.64280700683594,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.0077612064544224,
+   "custom_unfused_same_tile_ms": 510.239273071289,
+   "custom_gain_same_tile": 1.00709862256942,
+   "custom_gemm_over_vendor_gemm": 1.4118458449657596,
+   "est_unfused_ms": 271.98827821176474,
+   "est_fused_ms": 268.43545600000004,
+   "estimated_gain": 1.0132352941176472,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.497399091720581,
+    "rel_tol": 2.994798183441162,
+    "rows_checked": 4096,
+    "addmm_rel": 1.722783088684082,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.014005857519805431,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.01513506006449461,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 0.9999093804552687,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 840.0,
+     "min": 345.0,
+     "max": 1140.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 77.0,
+     "min": 75.0,
+     "max": 77.0
+    },
+    "power_w": {
+     "median": 25.87,
+     "min": 21.29,
+     "max": 27.07
+    },
+    "n_samples": 454
+   },
+   "est_unfused_ms_adj": 274.6750873327256,
+   "est_fused_ms_adj": 271.0787353515625,
+   "estimated_gain_adj": 1.0132668170245775,
+   "addmm_gain": 1.0035223753084188
+  },
+  {
+   "name": "r5_M32768_K24576",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": true,
+   "dims": {
+    "M": 32768,
+    "N": 6144,
+    "K": 24576
+   },
+   "vendor_gemm_only_ms": 712.7898559570311,
+   "vendor_eager_unfused_ms": 738.7698974609376,
+   "clean_unfused_ms": 792.8505249023438,
+   "best_unfused_ms": 738.7698974609376,
+   "addmm_ms": 775.5927734375,
+   "compiled_ms": 12356.108398437498,
+   "nocg_ms": 676.277099609375,
+   "forced_ms": 601.1785888671875,
+   "triton_ms": 1175.4910888671875,
+   "best_fused_ms": 601.1785888671875,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 712544.575,
+     "avg_us": 712544.575
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 5262.551,
+     "avg_us": 5262.551
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 2.785,
+     "avg_us": 2.785
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 12109610.696,
+      "avg_us": 12109610.696
+     },
+     {
+      "name": "void at::native::(anonymous namespace)::multi_tensor_apply_kernel<at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16> >(at::native::(anonymous namespace)::TensorListMetadata<2>, at::native::(anonymous namespace)::UnaryOpFunctor<c10::BFloat16, 2, 1, 1>, at::native::Copy<c10::BFloat16, c10::BFloat16>)",
+      "count": 56,
+      "total_us": 243558.278,
+      "avg_us": 4349.255
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5326.892,
+      "avg_us": 5326.892
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 2.112,
+      "avg_us": 2.112
+     }
+    ],
+    "nocg": [
+     {
+      "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+      "count": 1,
+      "total_us": 671133.147,
+      "avg_us": 671133.147
+     },
+     {
+      "name": "Memcpy DtoD (Device -> Device)",
+      "count": 1,
+      "total_us": 5266.588,
+      "avg_us": 5266.588
+     },
+     {
+      "name": "Memset (Device)",
+      "count": 1,
+      "total_us": 3.104,
+      "avg_us": 3.104
+     }
+    ],
+    "forced": [
+     {
+      "name": "triton_tem_fused_addmm_0",
+      "count": 1,
+      "total_us": 675765.621,
+      "avg_us": 675765.621
+     }
+    ]
+   },
+   "fusion_evidence": {
+    "compiled": {
+     "n_kernels": 4,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9799,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "nocg": {
+     "n_kernels": 3,
+     "dominant_kernel": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "dominant_frac_of_gpu_time": 0.9922,
+     "triton_gemm_template_present": false,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    },
+    "forced": {
+     "n_kernels": 1,
+     "dominant_kernel": "triton_tem_fused_addmm_0",
+     "dominant_frac_of_gpu_time": 1.0,
+     "triton_gemm_template_present": true,
+     "separate_elementwise_kernels": [],
+     "vendor_fused_ok": true,
+     "vendor_separate_kernels": []
+    }
+   },
+   "compile_errors": {
+    "compiled": null,
+    "nocg": null,
+    "forced": null,
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 243558.278,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 1.2288692763543294,
+   "measured_gain_verified": 1.2288692763543294,
+   "custom_unfused_ms": 1211.4155273437502,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     32,
+     8,
+     3
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 1175.4910888671875,
+   "custom_fused_cfg": [
+    128,
+    128,
+    32,
+    8,
+    3
+   ],
+   "custom_gain_best": 1.030561217194069,
+   "custom_unfused_same_tile_ms": 1213.7233276367188,
+   "custom_gain_same_tile": 1.0325244820072397,
+   "custom_gemm_over_vendor_gemm": 1.0221543302054086,
+   "est_unfused_ms": 543.9765564235295,
+   "est_fused_ms": 536.8709120000001,
+   "estimated_gain": 1.0132352941176472,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.4309288263320923,
+    "rel_tol": 2.8618576526641846,
+    "rows_checked": 4096,
+    "addmm_rel": 1.599039912223816,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.013602936640381813,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.016833826899528503,
+    "custom_unfused_ok": true,
+    "compiled_ok": true,
+    "nocg_ok": true,
+    "forced_ok": true
+   },
+   "gemm_drift_ratio": 1.0025972849415616,
+   "drift_clean": true,
+   "excluded_from_aggregate": false,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 360.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5501.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 66.0,
+     "min": 65.0,
+     "max": 80.0
+    },
+    "power_w": {
+     "median": 12.45,
+     "min": 10.18,
+     "max": 36.34
+    },
+    "n_samples": 12055
+   },
+   "est_unfused_ms_adj": 549.3501746654512,
+   "est_fused_ms_adj": 542.157470703125,
+   "estimated_gain_adj": 1.0132668170245775,
+   "addmm_gain": 0.952522925383433
+  },
+  {
+   "name": "r5_M49152_K24576",
+   "kind": "res2_down",
+   "regime": "prefill",
+   "core": false,
+   "dims": {
+    "M": 49152,
+    "N": 6144,
+    "K": 24576
+   },
+   "vendor_gemm_only_ms": 13855.73828125,
+   "vendor_eager_unfused_ms": 14039.2802734375,
+   "clean_unfused_ms": 17899.4189453125,
+   "best_unfused_ms": 14039.2802734375,
+   "addmm_ms": 17909.073242187504,
+   "compiled_ms": null,
+   "nocg_ms": null,
+   "forced_ms": null,
+   "triton_ms": 17348.806640625,
+   "best_fused_ms": 17348.806640625,
+   "addmm_fused_verified": true,
+   "addmm_separate_kernels": [],
+   "addmm_kernel_evidence": [
+    {
+     "name": "ampere_bf16_s1688gemm_bf16_128x128_ldg8_f2f_stages_32x1_nn",
+     "count": 1,
+     "total_us": 17746442.741,
+     "avg_us": 17746442.741
+    },
+    {
+     "name": "Memcpy DtoD (Device -> Device)",
+     "count": 1,
+     "total_us": 115275.46,
+     "avg_us": 115275.46
+    },
+    {
+     "name": "Memset (Device)",
+     "count": 1,
+     "total_us": 1.728,
+     "avg_us": 1.728
+    }
+   ],
+   "fused_verified": true,
+   "kernel_evidence": {
+    "compiled": [],
+    "nocg": [],
+    "forced": []
+   },
+   "fusion_evidence": {
+    "compiled": {},
+    "nocg": {},
+    "forced": {}
+   },
+   "compile_errors": {
+    "compiled": "not run: light row (host-approved core-full + light-rest sweep)",
+    "nocg": "not run: light row (host-approved core-full + light-rest sweep)",
+    "forced": "not run: light row (host-approved core-full + light-rest sweep)",
+    "add_only": null
+   },
+   "compiled_cudagraph_input_copy_us": 0,
+   "stock_fused_verified": true,
+   "needs_custom_kernel": false,
+   "measured_gain": 0.8092360797060406,
+   "measured_gain_verified": 0.8092360797060406,
+   "custom_unfused_ms": 17825.833984375004,
+   "custom_unfused_cfg": {
+    "gemm": [
+     128,
+     128,
+     64,
+     8,
+     4
+    ],
+    "add": [
+     64,
+     128,
+     4
+    ]
+   },
+   "custom_fused_ms": 17348.806640625,
+   "custom_fused_cfg": [
+    128,
+    128,
+    64,
+    8,
+    4
+   ],
+   "custom_gain_best": 1.0274962626324375,
+   "custom_unfused_same_tile_ms": 17324.493164062504,
+   "custom_gain_same_tile": 0.9985985504901782,
+   "custom_gemm_over_vendor_gemm": 1.2609303625049302,
+   "est_unfused_ms": 815.9648346352941,
+   "est_fused_ms": 805.306368,
+   "estimated_gain": 1.013235294117647,
+   "numerics": {
+    "eager_rel_max_vs_fp32": 1.7233893871307373,
+    "rel_tol": 3.4467787742614746,
+    "rows_checked": 4096,
+    "addmm_rel": 1.5407730340957642,
+    "addmm_ok": true,
+    "custom_fused_rel": 0.014731083996593952,
+    "custom_fused_ok": true,
+    "custom_unfused_rel": 0.016128629446029663,
+    "custom_unfused_ok": true,
+    "compiled_ok": null,
+    "nocg_ok": null,
+    "forced_ok": null
+   },
+   "gemm_drift_ratio": 1.269822069996383,
+   "drift_clean": false,
+   "excluded_from_aggregate": true,
+   "clocks": {
+    "gr_mhz": {
+     "median": 1500.0,
+     "min": 1485.0,
+     "max": 1500.0
+    },
+    "mem_mhz": {
+     "median": 5501.0,
+     "min": 5500.0,
+     "max": 5501.0
+    },
+    "temp_c": {
+     "median": 67.0,
+     "min": 0.0,
+     "max": 74.0
+    },
+    "power_w": {
+     "median": 13.24,
+     "min": 10.7,
+     "max": 19.57
+    },
+    "n_samples": 13495
+   },
+   "est_unfused_ms_adj": 824.0252619981767,
+   "est_fused_ms_adj": 813.2362060546876,
+   "estimated_gain_adj": 1.0132668170245775,
+   "addmm_gain": 0.7839199764042437
+  }
+ ],
+ "aggregate": {
+  "per_K": {
+   "2048": {
+    "n": 8,
+    "n_clean": 6,
+    "n_relaxed": 6,
+    "est_gm_allM": 1.1588235294117648,
+    "clean": {
+     "gain_ver_gm": 1.1017298787777194,
+     "est_gm": 1.1588235294117648,
+     "delivered": 0.6405214589708257,
+     "custom_best_gm": 1.1271982665445648,
+     "custom_same_tile_gm": 1.1141281560731464
+    },
+    "relaxed": {
+     "gain_ver_gm": 1.1017298787777194,
+     "est_gm": 1.1588235294117648,
+     "delivered": 0.6405214589708257,
+     "custom_best_gm": 1.1271982665445648,
+     "custom_same_tile_gm": 1.1141281560731464
+    }
+   },
+   "6144": {
+    "n": 8,
+    "n_clean": 3,
+    "n_relaxed": 3,
+    "est_gm_allM": 1.052941176470588,
+    "clean": {
+     "gain_ver_gm": 1.0300648250015865,
+     "est_gm": 1.052941176470588,
+     "delivered": 0.5678911389188576,
+     "custom_best_gm": 1.0476536225194686,
+     "custom_same_tile_gm": 1.046633988582134
+    },
+    "relaxed": {
+     "gain_ver_gm": 1.0300648250015865,
+     "est_gm": 1.052941176470588,
+     "delivered": 0.5678911389188576,
+     "custom_best_gm": 1.0476536225194686,
+     "custom_same_tile_gm": 1.046633988582134
+    }
+   },
+   "12288": {
+    "n": 8,
+    "n_clean": 8,
+    "n_relaxed": 8,
+    "est_gm_allM": 1.026470588235294,
+    "clean": {
+     "gain_ver_gm": 1.0131763747757976,
+     "est_gm": 1.026470588235294,
+     "delivered": 0.4977741581967994,
+     "custom_best_gm": 1.0204126455257232,
+     "custom_same_tile_gm": 1.0201148204017556
+    },
+    "relaxed": {
+     "gain_ver_gm": 1.0131763747757976,
+     "est_gm": 1.026470588235294,
+     "delivered": 0.4977741581967994,
+     "custom_best_gm": 1.0204126455257232,
+     "custom_same_tile_gm": 1.0201148204017556
+    }
+   },
+   "16384": {
+    "n": 8,
+    "n_clean": 8,
+    "n_relaxed": 8,
+    "est_gm_allM": 1.0198529411764705,
+    "clean": {
+     "gain_ver_gm": 1.0382439704874147,
+     "est_gm": 1.0198529411764705,
+     "delivered": 1.9263629578845982,
+     "custom_best_gm": 1.0349718556490135,
+     "custom_same_tile_gm": 1.0189074913331548
+    },
+    "relaxed": {
+     "gain_ver_gm": 1.0382439704874147,
+     "est_gm": 1.0198529411764705,
+     "delivered": 1.9263629578845982,
+     "custom_best_gm": 1.0349718556490135,
+     "custom_same_tile_gm": 1.0189074913331548
+    }
+   },
+   "24576": {
+    "n": 8,
+    "n_clean": 6,
+    "n_relaxed": 7,
+    "est_gm_allM": 1.0132352941176472,
+    "clean": {
+     "gain_ver_gm": 1.0380248885431296,
+     "est_gm": 1.0132352941176472,
+     "delivered": 2.8729915788141964,
+     "custom_best_gm": 1.0175740347667697,
+     "custom_same_tile_gm": 1.0217481270798034
+    },
+    "relaxed": {
+     "gain_ver_gm": 1.0323912857136526,
+     "est_gm": 1.0132352941176472,
+     "delivered": 2.4473415872537174,
+     "custom_best_gm": 1.0182522314958327,
+     "custom_same_tile_gm": 1.0223358888813112
+    }
+   }
+  },
+  "gain_token_independent_perK": {
+   "2048": {
+    "gains_by_M": {
+     "512": 1.033668346240413,
+     "8192": 1.1070137911208362,
+     "32768": 1.0792767178107974
+    },
+    "spread_frac": 0.07095645827521964,
+    "flat": false,
+    "n_points": 3
+   },
+   "6144": {
+    "gains_by_M": {
+     "512": 1.0191787505149976,
+     "8192": 1.0656759459020397,
+     "32768": 1.0364163865014535
+    },
+    "spread_frac": 0.045622218245373325,
+    "flat": true,
+    "n_points": 3
+   },
+   "12288": {
+    "gains_by_M": {
+     "512": 1.0077910853165772,
+     "8192": 1.019575847609987,
+     "32768": 1.0269184996581842
+    },
+    "spread_frac": 0.018979543102029352,
+    "flat": true,
+    "n_points": 3
+   },
+   "16384": {
+    "gains_by_M": {
+     "512": 1.0041167210229778,
+     "8192": 1.0055873644114357,
+     "32768": 1.250989974761516
+    },
+    "spread_frac": 0.2458611121295021,
+    "flat": false,
+    "n_points": 3
+   },
+   "24576": {
+    "gains_by_M": {
+     "512": 0.9992259647282253,
+     "8192": 1.002457921912893,
+     "32768": 1.2288692763543294
+    },
+    "spread_frac": 0.2298212013421445,
+    "flat": false,
+    "n_points": 3
+   }
+  },
+  "overall_clean": {
+   "n": 31,
+   "gain_ver_gm": 1.0427949743026619,
+   "est_gm": 1.0490475597310442,
+   "delivered": 0.8725199487463015,
+   "custom_best_gm": 1.0461712420192308,
+   "custom_same_tile_gm": 1.0402546007417368
+  },
+  "overall_relaxed": {
+   "n": 32,
+   "gain_ver_gm": 1.0414051087937157,
+   "est_gm": 1.0479094955842132,
+   "delivered": 0.864235957586647,
+   "custom_best_gm": 1.0454178832513767,
+   "custom_same_tile_gm": 1.039802029802026
+  },
+  "stock_fused_verified_count": 40,
+  "needs_custom_kernel_any": false,
+  "addmm_primary": {
+   "note": "PRIMARY vendor-framing metric added at analysis: addmm_gain = best_unfused_ms / addmm_ms (same vendor library both sides). measured_gain_verified admits the forced Triton template, which at M=32768 K>=16384 beats cuBLAS itself by 16-19% (a GEMM-quality inversion, not residual-fusion benefit) and inflates those rows.",
+   "per_K_clean": {
+    "2048": {
+     "n_clean": 6,
+     "addmm_gain_gm": 1.0377557054135265,
+     "custom_same_tile_gm": 1.1141281560731464,
+     "est_gm": 1.1588235294117648,
+     "delivered_addmm": 0.23772110815924055,
+     "delivered_same_tile": 0.718584686386477
+    },
+    "6144": {
+     "n_clean": 3,
+     "addmm_gain_gm": 1.0131102471416518,
+     "custom_same_tile_gm": 1.046633988582134,
+     "est_gm": 1.052941176470588,
+     "delivered_addmm": 0.24763800156453422,
+     "delivered_same_tile": 0.8808642287736468
+    },
+    "12288": {
+     "n_clean": 8,
+     "addmm_gain_gm": 1.0074081985462224,
+     "custom_same_tile_gm": 1.0201148204017556,
+     "est_gm": 1.026470588235294,
+     "delivered_addmm": 0.2798652784128485,
+     "delivered_same_tile": 0.7598932151774367
+    },
+    "16384": {
+     "n_clean": 8,
+     "addmm_gain_gm": 1.0102594251402055,
+     "custom_same_tile_gm": 1.0189074913331548,
+     "est_gm": 1.0198529411764705,
+     "delivered_addmm": 0.516771044099242,
+     "delivered_same_tile": 0.9523773412255803
+    },
+    "24576": {
+     "n_clean": 6,
+     "addmm_gain_gm": 0.9948770022865846,
+     "custom_same_tile_gm": 1.0217481270798034,
+     "est_gm": 1.0132352941176472,
+     "delivered_addmm": -0.38707093834693623,
+     "delivered_same_tile": 1.64319182380735
+    },
+    "overall": {
+     "n_clean": 31,
+     "addmm_gain_gm": 1.0120502512254732,
+     "custom_same_tile_gm": 1.0402546007417368,
+     "est_gm": 1.0490475597310442,
+     "delivered_addmm": 0.24568503084662338,
+     "delivered_same_tile": 0.8207258620505435
+    }
+   },
+   "gain_token_independent_perK_addmm": {
+    "2048": {
+     "gains_by_M": {
+      "512": 1.007,
+      "8192": 1.054,
+      "32768": 0.9917
+     },
+     "spread_frac": 0.06280572468277162,
+     "flat": false
+    },
+    "6144": {
+     "gains_by_M": {
+      "512": 1.0192,
+      "8192": 0.9065,
+      "32768": 1.013
+     },
+     "spread_frac": 0.12431662964766774,
+     "flat": false
+    },
+    "12288": {
+     "gains_by_M": {
+      "512": 1.0078,
+      "8192": 1.0085,
+      "32768": 1.0066
+     },
+     "spread_frac": 0.0019285390359685504,
+     "flat": true
+    },
+    "16384": {
+     "gains_by_M": {
+      "512": 1.0041,
+      "8192": 1.0056,
+      "32768": 1.0054
+     },
+     "spread_frac": 0.0014646139812906,
+     "flat": true
+    },
+    "24576": {
+     "gains_by_M": {
+      "512": 0.9992,
+      "8192": 1.0025,
+      "32768": 0.9525
+     },
+     "spread_frac": 0.05242393143383823,
+     "flat": false
+    }
+   },
+   "forced_faster_than_vendor_rows": [
+    [
+     "r5_M2048_K2048",
+     0.995
+    ],
+    [
+     "r5_M8192_K6144",
+     0.981
+    ],
+    [
+     "r5_M32768_K12288",
+     0.994
+    ],
+    [
+     "r5_M32768_K16384",
+     0.812
+    ],
+    [
+     "r5_M32768_K24576",
+     0.843
+    ]
+   ],
+   "addmm_slower_rows": [
+    [
+     "r5_M1024_K6144",
+     0.8765
+    ],
+    [
+     "r5_M8192_K6144",
+     0.9065
+    ],
+    [
+     "r5_M32768_K24576",
+     0.9525
+    ],
+    [
+     "r5_M49152_K24576",
+     0.7839
+    ]
+   ]
+  }
+ }
+}

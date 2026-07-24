@@ -106,6 +106,45 @@ Headlines (details in the results file):
   `merge_token_independence` blocks), five sub-sections + T6 verdict in
   `rtx4060_sim_real_results.md`, this worklog.
 
+# ROUND 5 — residual₂ → dense DOWN-GEMM epilogue (2026-07-23)
+
+Task: `RTX4060_RESIDUAL_DOWN_TASK.md` — the one untested residual site in the dense case:
+`out = addmm(residual2, x_act, W_down)` at N=HIDDEN=6144, K-sweep {2048, 6144, 12288, 16384,
+24576} (headline K=24576 = 4×H dense FFN width), M-sweep {512…16384, 32768, 49152}
+(131072 dropped with arithmetic; covered by per-K M-independence assertion at M∈{512,8192,
+32768}). Both comparisons per the Round-4 lesson: vendor-stock (PRIMARY — addmm is expected to
+fuse stock) and custom-vs-custom (mechanism isolation). Estimator cell VALID (tile-local
+epilogue); sanity anchors ≈1.159 @ (2048,2048), ≈1.013 @ (2048,24576) to reproduce.
+
+Host decision (asked): **core-full + light rest** sweep — all 6 paths (incl. the 3
+torch.compile variants) on the 15 core configs (5 K × M∈{2048,8192,32768}); the other 25 rows
+run the fast paths only (unfused incl. compile-of-add clean variant, addmm + kernel evidence,
+custom pair) with compile-path fields null-with-reason (~120 fresh GEMM autotunes avoided;
+answers §9 fully). Locked clocks re-verified before run.
+
+## R5 results + close-out (2026-07-23)
+
+- `rtx4060_residual_down.py` authored (est wiring verbatim from spec §3 — sanity anchors
+  reproduced exactly: 1.1588/1.0132; custom kernel family per §4; core-full + light-rest sweep
+  per host decision), smoke-passed, full run at the verified lock: **40/40 rows, 0 errors**
+  (~2 h). `rtx4060_residual_down.json`.
+- **Q1 answered: `addmm` fuses residual₂→down stock, 40/40** (profiler-verified single GEMM,
+  numerics OK) → `needs_custom_kernel = False` everywhere — the canonical case confirmed.
+- **Three-metric story** (drift-clean n=31): (1) mechanism (custom-vs-custom same-tile) delivers
+  the estimator's K-law — per-K 1.114/1.047/1.020/1.019/1.022 vs est 1.159/1.053/1.027/1.020/
+  1.013, delivered 0.72–1.64, overall 0.82; (2) stock addmm fuses but delivers only ≈0.25
+  overall (+1.2% vs est +4.9%) and is NEUTRAL at the K=24576 headline (0.995; cuBLASLt's addmm
+  kernel choice is 5–12% worse than its mm choice on 4 rows — vendor-heuristic tax); (3)
+  `measured_gain_verified` inflated at M=32768 K≥16384 by a GEMM-quality INVERSION — the forced
+  Triton template beats cuBLAS mm by 16–19% there (forced/vendor 0.81–0.84) — flagged, and the
+  clean addmm framing added to the JSON as `aggregate.addmm_primary` (+ per-row `addmm_gain`).
+- M-independence: flat (spread ≤0.2%) at K∈{12288,16384}; not flat at K=2048 (small-M
+  occupancy), K=6144 (addmm-slow 8192 row), K=24576 (`r5_M49152_K24576` ran under WSL2 memory
+  paging — vendor GEMM 13.9 s vs expected ~0.8 s — excluded as unusable; M=32768 inversion row).
+  131072 coverage claimed only via the mid-K flatness + K-driven structure for M≤16384.
+- Bracket check vs R2-F1: K=6144 addmm +1.3% / K=16384 +1.0% vs F1's +1.4…+2.1% / +0.3…+0.7% ✓.
+- Addendum + main-verdict forward-pointer written into `rtx4060_sim_real_results.md`.
+
 # ROUND 4 — N4 CUSTOM-vs-CUSTOM ADDENDUM (2026-07-22)
 
 Host request: in the N4 (SwiGLU→up_gate, F4) step — both dense and MoE — the fused custom

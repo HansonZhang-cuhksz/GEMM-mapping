@@ -16,7 +16,7 @@ a stated formula from) a deliverable.
 
 ---
 
-## Verdict: **A — the fusion gains are real on working fused paths; the C500 null was a tooling problem.** With a quantitative caveat: against *vendor* baselines the estimator over-predicts the magnitude ~2× (delivered fraction ≈ 0.4–0.5) — but the **N4 addendum** (final section) shows this is mostly the Triton-vs-cuBLAS kernel-quality gap, not a fusion-model error: compared custom-vs-custom (the estimator's own regime), delivered fraction is ≈ 0.9–1.2.
+## Verdict: **A — the fusion gains are real on working fused paths; the C500 null was a tooling problem.** With a quantitative caveat: against *vendor* baselines the estimator over-predicts the magnitude ~2× (delivered fraction ≈ 0.4–0.5) — but the **N4 addendum** shows this is mostly the Triton-vs-cuBLAS kernel-quality gap, not a fusion-model error: compared custom-vs-custom (the estimator's own regime), delivered fraction is ≈ 0.9–1.2. The **Residual₂→down (dense) addendum** (round 5, final section) closes the last untested residual site: stock-fusable via `addmm` at every (M,K) with the estimator's K-law confirmed custom-vs-custom (delivered ≈ 0.8), but the stock path monetizes only ~¼ of it and rounds to zero at realistic dense-FFN width.
 
 At locked clocks, with 10 of 12 configs carrying a verified-fused path and 7 of 12 fully
 drift-clean:
@@ -405,3 +405,70 @@ subset (n=10) reads 1.073/1.063 measured vs 1.064 est — the same agreement.
    the estimator's predicted N4 gain is real and approximately exact. This is also the correct
    reading for the C500: a MACA-CUTLASS fused kernel competes against the *same-quality*
    unfused MACA-CUTLASS pair — the custom-vs-custom regime, where the estimator was right.
+
+---
+
+# Residual₂→down (dense) addendum (round 5, `RTX4060_RESIDUAL_DOWN_TASK.md`)
+
+> The one untested residual site in the dense case: `out = addmm(residual2, x_act, W_down)` at
+> `N=HIDDEN=6144`, K-sweep {2048, 6144, 12288, 16384, **24576 = 4×H headline**}, M-sweep
+> {512…16384, 32768, 49152} (M=131072 dropped: `x_act[131072,24576]` bf16 alone = 6.4 GB).
+> Clocks locked 1500/5501 (verified; ClockSampler per row). Host-approved sweep: all 6 paths on
+> the 15 core configs (5 K × M∈{2048, 8192, 32768}); the other 25 rows run unfused/addmm/custom
+> paths (compile fields null-with-reason). 40/40 rows measured, 0 errors; estimator sanity
+> anchors reproduced exactly (1.1588 @ (2048,2048), 1.0132 @ (2048,24576)). The estimator cell
+> is **VALID** (tile-local epilogue — not structure-blind). Raw: `rtx4060_residual_down.json`
+> (incl. `aggregate.addmm_primary` added at analysis).
+
+**Q1 — does `addmm` fuse residual₂→down, stock?** **Yes, 40/40**: profiler-verified single-GEMM
+(no separate add kernel), numerics-OK → **`needs_custom_kernel = False` at every (M,K)** — the
+canonical stock-fusable case, as predicted.
+
+**Q2/Q3 — but three metrics tell three different stories** (drift-clean geomeans, n=31/40):
+
+| K | est gain | custom same-tile (mechanism) | delivered | stock `addmm` gain | delivered |
+|---|---|---|---|---|---|
+| 2048 (narrow) | 1.159 | **1.114** | 0.72 | 1.038 | 0.24 |
+| 6144 (=H) | 1.053 | **1.047** | 0.88 | 1.013 | 0.25 |
+| 12288 (2×H) | 1.026 | **1.020** | 0.76 | 1.007 | 0.28 |
+| 16384 (=KV) | 1.020 | **1.019** | 0.95 | 1.010 | 0.52 |
+| **24576 (4×H, headline)** | 1.013 | **1.022** | 1.64 | **0.995 (≈ neutral)** | −0.4 |
+| overall | 1.049 | **1.040** | **0.82** | 1.012 | 0.25 |
+
+1. **The mechanism delivers the estimate.** Custom-vs-custom same-tile (identical Triton GEMM ±
+   the residual epilogue) tracks the estimator's K-law closely — delivered fraction 0.72–1.64
+   (overall 0.82), falling from +11.4% at K=2048 to +2% at wide K exactly as predicted. The
+   VALID-cell claim holds: where the estimator's structural assumptions are satisfied *and* the
+   kernel family is held fixed, its residual₂→down prediction is essentially right (the N4
+   addendum's lesson, reconfirmed at a new site).
+2. **The stock path fuses but under-delivers ~4×.** `addmm` captures only ≈0.25 of the predicted
+   gain on average (overall +1.2% vs est +4.9%), and at the dense headline K=24576 it is
+   **neutral** (0.995 clean geomean; clean rows at M≤16384 span +0.25…+0.47%). Cause:
+   cuBLASLt's addmm kernel selection is sometimes *worse* than its mm selection at the same
+   shape — 3 rows show addmm 5–12% slower than mm+add (e.g. `r5_M8192_K6144` 0.907), plus the
+   unusable `r5_M49152_K24576` at −22% — a vendor-heuristic tax that eats the (small) fusion
+   saving. Fusing via addmm is free to try but not reliably profitable.
+3. **A GEMM-quality inversion inflates `measured_gain_verified` at M=32768.** The forced Triton
+   template GEMM beats cuBLAS itself by 16–19% at M=32768, K≥16384 (`forced/vendor_mm` 0.81–0.84)
+   — so the min-over-verified-paths metric reads +23–25% there, which is template-vs-cuBLAS
+   quality, not residual fusion (the Round-4 confound, in reverse). Those rows are flagged;
+   `aggregate.addmm_primary` carries the clean per-K addmm framing. Deployment note: at those
+   shapes the best down-GEMM on this stack is a Triton template regardless of fusion.
+
+**Q4 — brackets and M-independence.** The K=6144 and K=16384 rows (stock addmm +1.3% / +1.0%)
+bracket-match the round-2 F1 points (task-dims addmm +1.4…+2.1%, GLM-dims +0.3…+0.7%). The
+gain is M-independent where the measurement is clean: spread ≤0.2% across M∈{512, 8192, 32768}
+at K∈{12288, 16384} (`flat: true`); NOT flat at K=2048 (small-M occupancy under-delivery, §7's
+anticipated latency-bound caveat), K=6144 (the addmm-slow 8192 row), and K=24576 (the M=32768
+inversion row + `r5_M49152_K24576`, which ran under WSL2 memory paging — vendor GEMM 13.9 s vs
+the expected ~0.8 s — and is excluded as unusable). The dropped M=131072 point is covered by
+flatness in the mid-K regime and by the K-driven (not M-driven) structure of the gain for
+M≤16384 at every K.
+
+**One-line verdict:** residual₂→down is **stock-expressible everywhere (`addmm`, verified
+40/40, no custom kernel needed) and the estimator's K-law is real (custom-vs-custom delivers
+0.8× of prediction)** — but on this vendor stack the stock path monetizes only ~a quarter of
+it, and at realistic dense-FFN width (4×H) the saving rounds to **zero via stock addmm (+0…
++0.5%) / ~+2% via a custom kernel** — free, small, and K-driven: it only matters when the FFN
+is narrow (K=2048 clean geomeans: +3.8% stock addmm, +11.4% custom same-tile; per-row custom
+gains reach +15.3%).
