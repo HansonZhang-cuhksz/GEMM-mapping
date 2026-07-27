@@ -133,7 +133,7 @@ def sweep(gpu, batches):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gpu", default="h100-sxm")
-    ap.add_argument("--out", default="fusion_configs.json")
+    ap.add_argument("--out", default="data/json/fusion_configs.json")
     args = ap.parse_args()
     gpu = GPUS[args.gpu]
     # denser grid incl. 3*2^k points (better divisor tiles) so the jagged peak isn't grid-missed

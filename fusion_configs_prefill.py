@@ -68,7 +68,7 @@ def sweep(gpu, tokens):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gpu", default="h100-sxm")
-    ap.add_argument("--out", default="prefill_configs.json")
+    ap.add_argument("--out", default="data/json/prefill_configs.json")
     args = ap.parse_args()
     gpu = GPUS[args.gpu]
     # incl. 3*2^k refinement points (10240/11264/14336) to resolve the jagged peak (per audit)
